@@ -46,7 +46,7 @@ put them in `server/functions/.env.<project-id>`.
 owns it is the "reporter" the workflow trusts.
 
 The deployed URL looks like
-`https://us-central1-<project>.cloudfunctions.net/flutterfixReport`.
+`https://europe-west1-<project>.cloudfunctions.net/flutterfixReport`.
 
 ### 2. The workflow
 

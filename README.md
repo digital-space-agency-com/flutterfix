@@ -358,6 +358,9 @@ firebase functions:secrets:set FLUTTERFIX_GITHUB_TOKEN      # paste the token wh
 firebase deploy --only functions:flutterfixReport
 ```
 
+(The repo's `server/` folder has a ready `firebase.json`, so you can also run the
+commands from there with `--project <your-project-id>`.)
+
 During deploy it asks for two values (or put them in
 `functions/.env.<your-project-id>`):
 
@@ -377,8 +380,10 @@ choose your app repo only, with **Contents: read and write** and **Issues: read
 and write**. The GitHub account that owns the token is the "reporter" the
 workflow trusts, so use an account you control.
 
-When it finishes, note the function's URL:
-`https://us-central1-<your-project-id>.cloudfunctions.net/flutterfixReport`
+The function runs in `europe-west1`; change `REGION` at the top of
+`server/functions/index.js` to match your users and database. When it finishes,
+note the function's URL:
+`https://europe-west1-<your-project-id>.cloudfunctions.net/flutterfixReport`
 
 **2. Add the workflow to your app repo.**
 
@@ -405,7 +410,7 @@ import 'package:path_provider/path_provider.dart';
 
 final sink = OutboxSink(
   HttpSink(
-    Uri.parse('https://us-central1-<your-project-id>.cloudfunctions.net/flutterfixReport'),
+    Uri.parse('https://europe-west1-<your-project-id>.cloudfunctions.net/flutterfixReport'),
     headers: () async => {
       'Authorization':
           'Bearer ${await FirebaseAuth.instance.currentUser?.getIdToken()}',

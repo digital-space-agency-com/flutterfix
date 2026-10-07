@@ -119,3 +119,9 @@ app.*.symbols
 !/dev/ci/**/Gemfile.lock
 # flutterfix reports written by the receiver
 .flutterfix/
+
+# per-project function settings (no secrets, but project specific)
+server/functions/.env.*
+server/functions/.secret.local
+
+node_modules/

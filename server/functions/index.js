@@ -17,8 +17,12 @@ const DAILY_CAP = defineString('FLUTTERFIX_DAILY_CAP', { default: '20' });
 
 const BRANCH = 'flutterfix-reports';
 
+// Where the function runs. Pick the region closest to your users and your
+// Firestore database (ReelMatch's is in Europe).
+const REGION = 'europe-west1';
+
 exports.flutterfixReport = onRequest(
-  { secrets: [GITHUB_TOKEN], maxInstances: 3, timeoutSeconds: 60, memory: '512MiB' },
+  { region: REGION, secrets: [GITHUB_TOKEN], maxInstances: 3, timeoutSeconds: 60, memory: '512MiB' },
   async (req, res) => {
     if (req.method !== 'POST') return void res.status(405).json({ error: 'POST only' });
 
