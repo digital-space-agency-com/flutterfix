@@ -48,6 +48,16 @@ function validateReport(body) {
       problems.push('screenshot is too large');
     }
   }
+  if (body.replay != null) {
+    if (typeof body.replay !== 'object') {
+      problems.push('replay must be an object');
+    } else if (
+      typeof body.replay.filmstripPngBase64 === 'string' &&
+      body.replay.filmstripPngBase64.length * 0.75 > MAX_SCREENSHOT_BYTES
+    ) {
+      problems.push('replay film strip is too large');
+    }
+  }
   if (body.element != null && typeof body.element !== 'object') {
     problems.push('element must be an object');
   }
@@ -69,7 +79,7 @@ function list(items, max = 8) {
 }
 
 /** Issue title and body for a report. [shot] is {path, url} when a screenshot was stored. */
-function buildIssue(report, { id, shot, repo, branch }) {
+function buildIssue(report, { id, shot, replayShot, repo, branch }) {
   const el = report.element || {};
   const comment = String(report.comment).trim();
   const label = el.name || (Array.isArray(el.texts) && el.texts[0]) || el.kind || 'element';
@@ -101,12 +111,47 @@ function buildIssue(report, { id, shot, repo, branch }) {
     lines.push(`![screenshot](${shot.url})`);
     lines.push('', `File: \`${shot.path}\` on branch \`${branch}\` of \`${repo}\`.`);
   }
+  const replay = report.replay && typeof report.replay === 'object' ? report.replay : null;
+  if (replay) {
+    lines.push('', `### Replay (${clean(replay.mode, 20)}, ${Number(replay.seconds) || 0}s, ${Number(replay.frames) || 0} frames)`);
+    if (replay.summary) {
+      for (const f of String(replay.summary).split('\n').slice(0, 12)) {
+        lines.push(`- ${clean(f, 300)}`);
+      }
+    }
+    if (replayShot) {
+      lines.push('', 'Film strip: frames in time order, each labelled with its time.');
+      lines.push(`![replay](${replayShot.url})`);
+      lines.push('', `File: \`${replayShot.path}\` on branch \`${branch}\`.`);
+    }
+    const events = Array.isArray(replay.timeline) ? replay.timeline.slice(0, 40) : [];
+    if (events.length) {
+      lines.push('', '<details><summary>Timeline</summary>', '');
+      for (const e of events) {
+        lines.push(`- +${(Number(e.t) / 1000).toFixed(1)}s ${clean(describeEvent(e), 160)}`);
+      }
+      lines.push('', '</details>');
+    }
+  }
   lines.push('', `<!-- flutterfix:v1 report=${id} -->`);
 
   return {
     title: `[flutterfix] ${clean(comment, 70)} (${clean(label, 40)})`,
     body: lines.join('\n'),
   };
+}
+
+function describeEvent(e) {
+  switch (e.kind) {
+    case 'route':
+      return `${e.action} ${e.name}`;
+    case 'list':
+      return `list shows ${e.items} items`;
+    case 'slow':
+      return `slow frame ${e.ms}ms`;
+    default:
+      return String(e.kind);
+  }
 }
 
 module.exports = {

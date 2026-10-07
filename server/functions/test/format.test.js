@@ -86,3 +86,41 @@ test('titles are capped', () => {
   const { title } = buildIssue({ comment: 'z'.repeat(500) }, { id: 'r3', repo: 'o/a', branch: 'b' });
   assert.ok(title.length < 140);
 });
+
+test('a replay adds a findings list, the film strip and a timeline', () => {
+  const { body } = buildIssue(
+    {
+      comment: 'List is slow',
+      replay: {
+        mode: 'rolling',
+        seconds: 10,
+        frames: 31,
+        summary: '/liked: its list was empty for 3.0s after opening, then showed 8 items at +3.2s.\n2 slow frames (over 32ms), worst 90ms at +1.1s.',
+        timeline: [
+          { t: 100, kind: 'route', action: 'push', name: '/liked' },
+          { t: 100, kind: 'list', items: 0 },
+          { t: 3200, kind: 'list', items: 8 },
+          { t: 1100, kind: 'slow', ms: 90 },
+        ],
+      },
+    },
+    {
+      id: 'r9',
+      repo: 'o/a',
+      branch: 'b',
+      replayShot: { path: 'reports/r9-replay.png', url: 'https://x/r9-replay.png?raw=true' },
+    },
+  );
+  assert.match(body, /### Replay \(rolling, 10s, 31 frames\)/);
+  assert.match(body, /- \/liked: its list was empty for 3\.0s/);
+  assert.match(body, /!\[replay\]\(https:\/\/x\/r9-replay\.png\?raw=true\)/);
+  assert.match(body, /\+0\.1s push \/liked/);
+  assert.match(body, /list shows 8 items/);
+  assert.match(body, /slow frame 90ms/);
+});
+
+test('an oversized replay film strip is rejected', () => {
+  const big = 'A'.repeat(9 * 1024 * 1024);
+  assert.ok(validateReport({ comment: 'x', replay: { filmstripPngBase64: big } }).length > 0);
+  assert.deepEqual(validateReport({ comment: 'x', replay: { summary: 'ok' } }), []);
+});

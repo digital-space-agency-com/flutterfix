@@ -20,8 +20,8 @@ Future<void> main(List<String> args) async {
       .length;
 
   final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
-  stdout
-      .writeln('flutterfix receiver listening on :$port, writing to $out/reports');
+  stdout.writeln(
+      'flutterfix receiver listening on :$port, writing to $out/reports');
 
   await for (final req in server) {
     try {
@@ -40,6 +40,13 @@ Future<void> main(List<String> args) async {
       if (b64 != null) {
         png = '${dir.path}/$id.png';
         File(png).writeAsBytesSync(base64Decode(b64));
+      }
+      final replay = json['replay'] as Map<String, dynamic>?;
+      final stripB64 = replay?.remove('filmstripPngBase64') as String?;
+      String? strip;
+      if (stripB64 != null) {
+        strip = '${dir.path}/$id.replay.png';
+        File(strip).writeAsBytesSync(base64Decode(stripB64));
       }
       File('${dir.path}/$id.json')
           .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(json));
@@ -67,6 +74,13 @@ Future<void> main(List<String> args) async {
       final comment =
           (json['comment'] as String).replaceAll(RegExp(r'\s+'), ' ');
       stdout.writeln('[fix $id] ${parts.join(' · ')} :: $comment');
+      if (replay != null) {
+        final summary =
+            ((replay['summary'] as String?) ?? '').replaceAll('\n', ' | ');
+        stdout.writeln('[fix $id] replay (${replay['mode']}, '
+            '${replay['seconds']}s, ${replay['frames']} frames): $summary'
+            '${strip != null ? ' · $strip' : ''}');
+      }
 
       req.response
         ..headers.contentType = ContentType.json

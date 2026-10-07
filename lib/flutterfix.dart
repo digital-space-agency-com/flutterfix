@@ -7,4 +7,6 @@ export 'src/overlay.dart' show FlutterFix;
 export 'src/report.dart' show ElementInfo, FixReport, FixSendResult;
 export 'src/http_sink.dart' show HttpSink;
 export 'src/outbox_sink.dart' show FlushableSink, OutboxSink;
+export 'src/replay/observer.dart' show FlutterFixObserver;
+export 'src/replay/replay_models.dart' show ReplayConfig, ReplayAttachment;
 export 'src/sink.dart' show FlutterFixSink, LocalReceiverSink, MemorySink;

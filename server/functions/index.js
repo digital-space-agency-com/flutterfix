@@ -67,7 +67,17 @@ exports.flutterfixReport = onRequest(
       const shot = req.body.screenshotPngBase64
         ? await putScreenshot(token, repo, BRANCH, id, req.body.screenshotPngBase64)
         : null;
-      const { title, body } = buildIssue(req.body, { id, shot, repo, branch: BRANCH });
+      const strip = req.body.replay && req.body.replay.filmstripPngBase64;
+      const replayShot = strip
+        ? await putScreenshot(token, repo, BRANCH, `${id}-replay`, strip)
+        : null;
+      const { title, body } = buildIssue(req.body, {
+        id,
+        shot,
+        replayShot,
+        repo,
+        branch: BRANCH,
+      });
       const issue = await createIssue(token, repo, { title, body, labels: ['flutterfix'] });
       res.status(200).json({ id: `#${issue.number}`, url: issue.url });
     } catch (e) {

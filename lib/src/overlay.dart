@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -9,6 +10,8 @@ import 'package:flutter/services.dart';
 import 'capture.dart';
 import 'inspect.dart';
 import 'outbox_sink.dart';
+import 'replay/recorder.dart';
+import 'replay/replay_models.dart';
 import 'report.dart';
 import 'sink.dart';
 
@@ -38,7 +41,9 @@ class FlutterFix extends StatefulWidget {
     this.appVersion,
     this.extra,
     this.holdDuration = const Duration(milliseconds: 600),
+    this.replay,
     @visibleForTesting this.screenshotter,
+    @visibleForTesting this.frameCapturer,
   });
 
   final Widget child;
@@ -56,7 +61,14 @@ class FlutterFix extends StatefulWidget {
 
   final Duration holdDuration;
 
+  /// Turn on the replay: the last few seconds of the screen are kept so a
+  /// report made after something went wrong shows what happened, and you can
+  /// record a flow by hand. Off when null. See [ReplayConfig].
+  final ReplayConfig? replay;
+
   final Future<Uint8List?> Function(Rect? highlight)? screenshotter;
+
+  final FrameCapturer? frameCapturer;
 
   @override
   State<FlutterFix> createState() => _FlutterFixState();
@@ -78,11 +90,45 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
   final ValueNotifier<int> _tick = ValueNotifier(0);
   int _session = 0;
 
+  ReplayRecorder? _recorder;
+  ReplayAttachment? _replay;
+  bool _attachReplay = true;
+  bool _recording = false;
+  Timer? _recTicker;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (widget.enabled && widget.replay != null) {
+      _recorder = ReplayRecorder(
+        config: widget.replay!,
+        capturer: widget.frameCapturer ?? _captureFrame,
+        screenSize: _screenSize,
+        screenName: widget.screenName,
+        onManualTimeout: () {
+          if (_recording) _stopRecording();
+        },
+      )..start();
+    }
     _flush();
+  }
+
+  RenderRepaintBoundary? get _boundary =>
+      _boundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+
+  Size _screenSize() => _boundary?.size ?? Size.zero;
+
+  Future<ui.Image?> _captureFrame(double width) async {
+    final b = _boundary;
+    if (b == null || !b.hasSize || b.size.width <= 0) return null;
+    return b.toImage(pixelRatio: width / b.size.width);
+  }
+
+  void _refresh() {
+    if (!mounted) return;
+    setState(() {});
+    _tick.value++;
   }
 
   @override
@@ -101,6 +147,8 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _recorder?.dispose();
+    _recTicker?.cancel();
     _bannerTimer?.cancel();
     _text.dispose();
     _focus.dispose();
@@ -109,16 +157,27 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
   }
 
   Future<void> _onLongPress(LongPressStartDetails d) async {
-    if (_composing || _sending) return;
+    if (_composing || _sending || _recording) return;
     final screen = MediaQuery.sizeOf(context);
     final info = Inspector.inspect(context, d.globalPosition, screen);
     HapticFeedback.mediumImpact();
-    final shot = await _capture(info?.rect);
+    final recorder = _recorder;
+    final results = await Future.wait<Object?>([
+      _capture(info?.rect),
+      if (recorder != null && recorder.config.rolling)
+        recorder.snapshotRolling()
+      else
+        Future<ReplayAttachment?>.value(null),
+    ]);
+    final shot = results[0] as Uint8List?;
+    final replay = results[1] as ReplayAttachment?;
     if (!mounted) return;
     setState(() {
       _touch = d.globalPosition;
       _element = info;
       _screenshot = shot;
+      _replay = replay;
+      _attachReplay = replay != null;
       _composing = true;
       _session++;
       _text.clear();
@@ -135,6 +194,37 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
 
   void _cancel() => setState(() => _composing = false);
 
+  void _startRecording() {
+    _recorder?.startManual();
+    setState(() {
+      _composing = false;
+      _recording = true;
+    });
+    _recTicker?.cancel();
+    _recTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  Future<void> _stopRecording() async {
+    if (!_recording) return;
+    _recTicker?.cancel();
+    setState(() => _recording = false);
+    final replay = await _recorder?.stopManual();
+    final shot = await _capture(null);
+    if (!mounted) return;
+    setState(() {
+      _element = null;
+      _touch = Offset.zero;
+      _screenshot = shot;
+      _replay = replay;
+      _attachReplay = replay != null;
+      _composing = true;
+      _session++;
+      _text.clear();
+    });
+  }
+
   Future<void> _send() async {
     final comment = _text.text.trim();
     if (comment.isEmpty || _sending) return;
@@ -149,6 +239,7 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
       appVersion: widget.appVersion,
       platform: defaultTargetPlatform.name,
       screenshotPng: _screenshot,
+      replay: _attachReplay ? _replay : null,
       extra: widget.extra?.call() ?? const {},
     );
     final result = await widget.sink.send(report);
@@ -225,9 +316,100 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
                 ],
               ),
             ),
+          if (_recording) _recordingPill(context),
           if (_banner != null) _bannerView(context),
         ],
       ),
+    );
+  }
+
+  Widget _recordingPill(BuildContext context) {
+    final secs = _recorder?.manualSeconds ?? 0;
+    return Positioned(
+      top: MediaQuery.paddingOf(context).top + 8,
+      left: 16,
+      right: 16,
+      child: Center(
+        child: GestureDetector(
+          onTap: _stopRecording,
+          child: Material(
+            color: const Color(0xFFB3261E),
+            borderRadius: BorderRadius.circular(24),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Text(
+                '● Recording ${secs ~/ 60}:${(secs % 60).toString().padLeft(2, '0')}   Tap to stop',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Under the comment field: what replay is attached, what it found, and a
+  /// button to record a flow by hand.
+  Widget _replayRow() {
+    final r = _replay;
+    final firstFinding = r == null || r.summary.startsWith('Nothing stood out')
+        ? null
+        : r.summary.split('\n').first;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (firstFinding != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              firstFinding,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFFFFB74D), fontSize: 12),
+            ),
+          ),
+        Row(
+          children: [
+            Expanded(
+              child: r == null
+                  ? const Text('No replay yet',
+                      style: TextStyle(color: Colors.white38, fontSize: 12))
+                  : GestureDetector(
+                      onTap: () {
+                        _attachReplay = !_attachReplay;
+                        _refresh();
+                      },
+                      child: Row(
+                        children: [
+                          Icon(
+                            _attachReplay
+                                ? Icons.check_box
+                                : Icons.check_box_outline_blank,
+                            size: 18,
+                            color: Colors.white70,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'Attach replay (${r.seconds}s, ${r.frames} frames)',
+                              style: const TextStyle(
+                                  color: Colors.white70, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+            TextButton(
+              onPressed: _sending ? null : _startRecording,
+              child: const Text('Record'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -325,6 +507,7 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
                       border: InputBorder.none,
                     ),
                   ),
+                  if (_recorder != null) _replayRow(),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [

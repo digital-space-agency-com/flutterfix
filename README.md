@@ -23,13 +23,14 @@ Both use the same widget. You pick the destination with one line of code.
 1. [How it works](#how-it-works)
 2. [Quick start (at your Mac)](#quick-start-at-your-mac)
 3. [Using it](#using-it)
-4. [Turning it on for testers only](#turning-it-on-for-testers-only)
-5. [Away from your Mac: the cloud route](#away-from-your-mac-the-cloud-route)
-6. [What to change for your own app](#what-to-change-for-your-own-app)
-7. [Reference](#reference)
-8. [Safety and cost](#safety-and-cost)
-9. [Troubleshooting](#troubleshooting)
-10. [Limits](#limits)
+4. [Replay: empty lists, slow screens and animations](#replay-empty-lists-slow-screens-and-animations)
+5. [Turning it on for testers only](#turning-it-on-for-testers-only)
+6. [Away from your Mac: the cloud route](#away-from-your-mac-the-cloud-route)
+7. [What to change for your own app](#what-to-change-for-your-own-app)
+8. [Reference](#reference)
+9. [Safety and cost](#safety-and-cost)
+10. [Troubleshooting](#troubleshooting)
+11. [Limits](#limits)
 
 ---
 
@@ -187,6 +188,83 @@ FlutterFix(
   // ...
 )
 ```
+
+---
+
+## Replay: empty lists, slow screens and animations
+
+A screenshot cannot show a list that took four seconds to fill in, or a page
+that stuttered as it opened. Switch on the replay and every report can carry
+what happened over the last few seconds.
+
+```dart
+FlutterFix(
+  replay: const ReplayConfig(),      // on, with the defaults
+  // ...
+)
+```
+
+Claude cannot watch video, so the replay is built from things it can read:
+
+| What | What it is | What it catches |
+|---|---|---|
+| **Film strip** | Up to 12 small frames in one picture, each labelled with its time (`+0.5s`, `+1.0s` ...) | A screen that stays blank, content that pops in late, an animation that jumps |
+| **Findings** | Plain-English sentences worked out from the event log | "/liked: its list was empty for 3.0s after opening, then showed 8 items at +3.2s". "Items arrived gradually (4 → 9 → 15) over 2.8s". "/profile looked empty for 4.0s". "7 slow frames, worst 265ms at +2.5s" |
+| **Timeline** | Page opened or closed, how many items each list showed, every slow frame | The exact order and timing behind the findings |
+
+**Two ways to record**
+
+- **Rolling (always on).** The last 10 seconds are kept in memory. When something
+  looks wrong, long press and report straight afterwards: the replay of what just
+  happened is attached. You do not have to know in advance.
+- **Manual.** In the comment box press **Record**. The box closes and a red bar
+  shows `Recording 0:07, tap to stop`. Do the thing (open the screen, scroll),
+  tap the bar, and the comment box reopens with the recording attached. It stops
+  by itself after 30 seconds.
+
+In the comment box a line shows what the replay found (so you can see it before
+sending) and a tick box lets you leave the replay out.
+
+**How it decides**
+
+- A list counts as empty when its list or grid has no items built. A screen
+  with no list counts as empty when it shows two or fewer pieces of text. A page
+  is only flagged if that lasts longer than 1.5 seconds after it opened.
+- A frame is slow when it takes longer than 32ms to build and draw.
+- "Page opened" comes from the navigator observer or, if you use a router that
+  does not report names, from the `screenName` you pass.
+
+**Tell it when pages change**
+
+```dart
+MaterialApp(navigatorObservers: [FlutterFixObserver()], ...)
+// go_router:
+GoRouter(observers: [FlutterFixObserver()], ...)
+```
+
+If your pages have no route names they show as their type (for example
+`MaterialPageRoute<dynamic>`); give routes names, or pass `screenName`, which
+also feeds the replay: when it changes, that counts as a page change.
+
+**Settings** (`ReplayConfig`)
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `rolling` | `true` | Keep the last seconds at all times. Set `false` for manual recording only. |
+| `rollingSeconds` | `10` | How much is kept. |
+| `maxManualSeconds` | `30` | A manual recording stops by itself after this. |
+| `fps` | `4` | Frames kept per second. A few is enough to see a list fill in. |
+| `frameWidth` | `240` | Width of each stored frame in pixels. |
+| `slowFrameMs` | `32` | A frame slower than this is reported. |
+
+**Cost.** Roughly 40 small frames in memory (a few megabytes) and a quick scan
+of the screen four times a second, only while `enabled` is true and the app is in
+the foreground. It is off in release builds for real users like everything else.
+
+**Read slow-frame findings with care in debug builds.** Debug mode is much
+slower than release, so a debug run exaggerates jank. Empty and late-loading
+lists are real in either. For performance, use a profile or release build
+(TestFlight or Play internal), where the same replay is accurate.
 
 ---
 
@@ -393,6 +471,7 @@ Nothing else in the package is specific to one app.
 | `appVersion` | `String?` | Sent with each report. |
 | `extra` | `Map<String,String> Function()?` | Extra values sent with each report. |
 | `holdDuration` | `Duration` | How long to hold. Default 600 ms. |
+| `replay` | `ReplayConfig?` | Switch on the [replay](#replay-empty-lists-slow-screens-and-animations). Off when null. |
 
 ### Destinations (sinks)
 
@@ -417,6 +496,14 @@ class SlackSink extends FlutterFixSink {
   }
 }
 ```
+
+### Replay classes
+
+| | |
+|---|---|
+| `ReplayConfig(...)` | Settings for the replay; see the table in the replay section. |
+| `FlutterFixObserver()` | Add to your navigator or router so page changes are recorded. |
+| `ReplayAttachment` | What is attached to a report: `mode`, `seconds`, `frames`, `summary`, `timeline`, `filmstripPng`. |
 
 ### Marking elements
 
@@ -465,7 +552,8 @@ More detail on the function is in [`server/README.md`](server/README.md).
 - **Secrets stay out of the app.** The GitHub token lives in Firebase and the
   Anthropic key in GitHub. The app holds only the function URL and a sign-in.
 - **What leaves the phone:** your comment, the element details, screen and
-  version, and a screenshot of the app (which may show user data in the app).
+  version, a screenshot of the app and, if the replay is on, a film strip of
+  the last seconds (which may show user data in the app).
   Use it with test accounts, and only for people you trust.
 - **Switch it off** by setting `enabled: false` in a release, or removing the
   tester from the list.
@@ -487,6 +575,9 @@ More detail on the function is in [`server/README.md`](server/README.md).
 | The Action cannot fetch the screenshot | The workflow needs `fetch-depth: 0` (already set) so the `flutterfix-reports` branch is available. |
 | The box covers the element | It moves to the top when the element is in the lower half; if it still overlaps, report it. |
 | Reports have no source line | Expected in release builds. Mark elements with `.fixable('name')`. |
+| The replay says "No replay yet" | `replay:` is not set on `FlutterFix`, or the app only just started: wait a second or two. |
+| The replay never mentions page changes | Add `FlutterFixObserver()` to the navigator, or pass `screenName`. |
+| Lots of slow frames in a debug build | Normal: debug is slower. Check on a profile or release build. |
 
 ---
 
@@ -498,6 +589,10 @@ More detail on the function is in [`server/README.md`](server/README.md).
 - Text inside platform views (maps, web views, video players) is not seen.
 - A report sent from a release build has no source line or widget chain; name the
   elements that matter.
+- The replay is a few frames a second, not video, and the film strip shows at most
+  12 of them. It shows what changed and when, not smooth motion.
+- List counting works for Flutter lists and grids (`ListView`, `GridView`,
+  `CustomScrollView` slivers). Content drawn by hand shows only in the pictures.
 - The Claude Action needs a project Claude can build and test on a Linux runner.
   Projects needing secrets, code generation or other setup need extra workflow
   steps.

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:ui';
 
+import 'replay/replay_models.dart';
+
 /// What was found under the finger.
 class ElementInfo {
   const ElementInfo({
@@ -80,6 +82,7 @@ class FixReport {
     this.appVersion,
     this.platform,
     this.screenshotPng,
+    this.replay,
     this.extra = const {},
   });
 
@@ -93,6 +96,9 @@ class FixReport {
 
   /// Screenshot with the element outlined, PNG encoded.
   final List<int>? screenshotPng;
+
+  /// The last seconds (or a manual recording): film strip, timeline, findings.
+  final ReplayAttachment? replay;
 
   /// Anything the app wants to attach (user id, build flavour, ...).
   final Map<String, String> extra;
@@ -113,6 +119,10 @@ class FixReport {
       appVersion: j['appVersion'] as String?,
       platform: j['platform'] as String?,
       screenshotPng: b64 == null ? null : base64Decode(b64),
+      replay: j['replay'] == null
+          ? null
+          : ReplayAttachment.fromJson(
+              Map<String, dynamic>.from(j['replay'] as Map)),
       extra: Map<String, String>.from((j['extra'] as Map?) ?? const {}),
     );
   }
@@ -126,6 +136,8 @@ class FixReport {
         'appVersion': appVersion,
         'platform': platform,
         'extra': extra,
+        if (replay != null)
+          'replay': replay!.toJson(includeImage: includeScreenshot),
         if (includeScreenshot && screenshotPng != null)
           'screenshotPngBase64': base64Encode(screenshotPng!),
       };
