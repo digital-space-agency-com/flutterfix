@@ -76,8 +76,35 @@ void main() {
       expect(a.findings.first,
           'Layout overflow: bottom edge overflowed by 188 pixels in Column at lib/card.dart:418 (first at +2.1s, seen 2 times).');
       expect(a.findings.last, contains('lib/other.dart:9'));
-      expect(a.timeline.where((e) => e['kind'] == 'overflow'), hasLength(3));
+      // Folded: one entry per place, with a count and the worst size.
+      final entries = a.timeline.where((e) => e['kind'] == 'overflow').toList();
+      expect(entries, hasLength(2));
+      expect(entries.first['count'], 2);
+      expect(entries.first['amount'], 188.0);
+      expect(entries.last['count'], 1);
     });
+  });
+
+  test('the biggest overflow is listed first, whatever order they happened in',
+      () {
+    final a = ReplayAnalyzer.analyze([
+      const ReplayEvent(100, 'overflow', {
+        'amount': 2.5,
+        'edge': 'bottom',
+        'widget': 'Column',
+        'file': 'lib/cast.dart',
+        'line': 66
+      }),
+      const ReplayEvent(900, 'overflow', {
+        'amount': 156.0,
+        'edge': 'bottom',
+        'widget': 'Column',
+        'file': 'lib/card.dart',
+        'line': 418
+      }),
+    ]);
+    expect(a.findings.first, contains('156 pixels'));
+    expect(a.findings.last, contains('2.5 pixels'));
   });
 
   group('film strip picking', () {

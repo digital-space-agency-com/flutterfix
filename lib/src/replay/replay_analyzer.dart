@@ -55,8 +55,23 @@ class ReplayAnalyzer {
     }
     timeline.sort((a, b) => (a['t'] as int).compareTo(b['t'] as int));
 
+    // One timeline entry per place, with how many times it happened, instead of
+    // the same line 36 times.
+    final seen = <String, Map<String, Object?>>{};
     for (final o in overflows) {
-      timeline.add(o.toJson());
+      final key = '${o.data['file']}:${o.data['line']}:${o.data['widget']}';
+      final existing = seen[key];
+      if (existing == null) {
+        final entry = o.toJson()..['count'] = 1;
+        seen[key] = entry;
+        timeline.add(entry);
+      } else {
+        existing['count'] = (existing['count'] as int) + 1;
+        final amount = (o.data['amount'] as num?)?.toDouble() ?? 0;
+        if (amount > ((existing['amount'] as num?)?.toDouble() ?? 0)) {
+          existing['amount'] = amount;
+        }
+      }
     }
     timeline.sort((a, b) => (a['t'] as int).compareTo(b['t'] as int));
 
@@ -66,7 +81,13 @@ class ReplayAnalyzer {
       final key = '${o.data['file']}:${o.data['line']}:${o.data['widget']}';
       byPlace.putIfAbsent(key, () => []).add(o);
     }
-    for (final group in byPlace.values) {
+    double worstOf(List<ReplayEvent> g) => g
+        .map((e) => ((e.data['amount'] as num?) ?? 0).toDouble())
+        .reduce((a, b) => a > b ? a : b);
+    final groups = byPlace.values.toList()
+      ..sort(
+          (a, b) => worstOf(b).compareTo(worstOf(a))); // biggest overflow first
+    for (final group in groups) {
       final first = group.first;
       final worst = group
           .map((e) => ((e.data['amount'] as num?) ?? 0).toDouble())
