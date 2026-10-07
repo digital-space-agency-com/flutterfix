@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'dart:ui';
+
+import 'replay/replay_models.dart';
 
 /// What was found under the finger.
 class ElementInfo {
@@ -43,6 +46,20 @@ class ElementInfo {
     return kind;
   }
 
+  factory ElementInfo.fromJson(Map<String, dynamic> j) {
+    final r = (j['rect'] as List).cast<num>();
+    return ElementInfo(
+      rect: Rect.fromLTWH(
+          r[0].toDouble(), r[1].toDouble(), r[2].toDouble(), r[3].toDouble()),
+      kind: j['kind'] as String? ?? 'unknown',
+      name: j['name'] as String?,
+      location: j['location'] as String?,
+      texts: (j['texts'] as List?)?.cast<String>() ?? const [],
+      nearbyTexts: (j['nearbyTexts'] as List?)?.cast<String>() ?? const [],
+      creatorChain: j['creatorChain'] as String?,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'name': name,
         'location': location,
@@ -65,6 +82,7 @@ class FixReport {
     this.appVersion,
     this.platform,
     this.screenshotPng,
+    this.replay,
     this.extra = const {},
   });
 
@@ -79,8 +97,35 @@ class FixReport {
   /// Screenshot with the element outlined, PNG encoded.
   final List<int>? screenshotPng;
 
+  /// The last seconds (or a manual recording): film strip, timeline, findings.
+  final ReplayAttachment? replay;
+
   /// Anything the app wants to attach (user id, build flavour, ...).
   final Map<String, String> extra;
+
+  factory FixReport.fromJson(Map<String, dynamic> j) {
+    final b64 = j['screenshotPngBase64'] as String?;
+    final touch = (j['touch'] as List).cast<num>();
+    final size = (j['screenSize'] as List).cast<num>();
+    return FixReport(
+      comment: j['comment'] as String,
+      element: j['element'] == null
+          ? null
+          : ElementInfo.fromJson(
+              Map<String, dynamic>.from(j['element'] as Map)),
+      touch: Offset(touch[0].toDouble(), touch[1].toDouble()),
+      screenSize: Size(size[0].toDouble(), size[1].toDouble()),
+      screenName: j['screenName'] as String?,
+      appVersion: j['appVersion'] as String?,
+      platform: j['platform'] as String?,
+      screenshotPng: b64 == null ? null : base64Decode(b64),
+      replay: j['replay'] == null
+          ? null
+          : ReplayAttachment.fromJson(
+              Map<String, dynamic>.from(j['replay'] as Map)),
+      extra: Map<String, String>.from((j['extra'] as Map?) ?? const {}),
+    );
+  }
 
   Map<String, dynamic> toJson({bool includeScreenshot = false}) => {
         'comment': comment,
@@ -91,6 +136,10 @@ class FixReport {
         'appVersion': appVersion,
         'platform': platform,
         'extra': extra,
+        if (replay != null)
+          'replay': replay!.toJson(includeImage: includeScreenshot),
+        if (includeScreenshot && screenshotPng != null)
+          'screenshotPngBase64': base64Encode(screenshotPng!),
       };
 }
 
@@ -98,12 +147,27 @@ class FixReport {
 class FixSendResult {
   const FixSendResult.ok(this.id)
       : ok = true,
+        queued = false,
+        retryable = false,
         message = null;
-  const FixSendResult.failed(this.message)
+
+  /// Not sent yet, but saved on the device and will be sent automatically.
+  const FixSendResult.queued(this.message)
+      : ok = true,
+        queued = true,
+        retryable = false,
+        id = null;
+
+  /// [retryable] is true for problems that may go away (no signal, server
+  /// busy) and false for ones that will not (not allowed, bad request).
+  const FixSendResult.failed(this.message, {this.retryable = true})
       : ok = false,
+        queued = false,
         id = null;
 
   final bool ok;
+  final bool queued;
+  final bool retryable;
   final String? id;
   final String? message;
 }

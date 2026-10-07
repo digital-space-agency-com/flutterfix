@@ -1,0 +1,9 @@
+{
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "flutterfix",
+      "ignore": ["node_modules", ".git", "test", "*.local"]
+    }
+  ]
+}

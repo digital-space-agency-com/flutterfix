@@ -1,0 +1,14 @@
+{
+  "name": "flutterfix-functions",
+  "private": true,
+  "description": "Receives FlutterFix reports from the app and files them as GitHub issues.",
+  "engines": { "node": "20" },
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.0"
+  }
+}
