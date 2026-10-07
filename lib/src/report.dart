@@ -36,6 +36,9 @@ class ElementInfo {
   /// A short label for the composer and the report line.
   String get label {
     if (name != null) return name!;
+    if (texts.length > 1) {
+      return '"${texts.first.replaceAll(RegExp(r'\s+'), ' ')}" +${texts.length - 1} more texts';
+    }
     if (texts.isNotEmpty) return '"${texts.first}"';
     return kind;
   }

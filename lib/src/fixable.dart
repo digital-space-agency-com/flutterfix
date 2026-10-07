@@ -30,7 +30,8 @@ class Fixable extends StatefulWidget {
 
   static String? _callSite() {
     for (final line in StackTrace.current.toString().split('\n')) {
-      if (line.contains('flutterfix/src/') || line.contains('flutterfix/lib/')) {
+      if (line.contains('flutterfix/src/') ||
+          line.contains('flutterfix/lib/')) {
         continue;
       }
       final m = _frame.firstMatch(line.trim());
