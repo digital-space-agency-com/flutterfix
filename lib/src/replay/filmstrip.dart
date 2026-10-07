@@ -29,6 +29,55 @@ class Filmstrip {
     return out;
   }
 
+  /// Picks up to [max] frames, favouring the moments that matter: for each
+  /// time in [anchors] (a page change, an overflow) it keeps the frame at that
+  /// moment and the ones just after it, so a half-second transition is shown
+  /// as it plays rather than missed between evenly spaced frames. The rest are
+  /// spread evenly. The first and last frames are always kept. Result is in time
+  /// order. [timeOf] gives a frame's time in milliseconds.
+  static List<T> pickKey<T>(List<T> items, int Function(T) timeOf,
+      {required List<int> anchors, int max = maxFrames, int afterMs = 450}) {
+    if (items.length <= max) return List.of(items);
+    final chosen = <int>{0, items.length - 1};
+
+    int nearest(int t) {
+      var best = 0;
+      for (var i = 1; i < items.length; i++) {
+        final better =
+            (timeOf(items[i]) - t).abs() < (timeOf(items[best]) - t).abs();
+        if (better) {
+          best = i;
+        }
+      }
+      return best;
+    }
+
+    // Anchors earliest first; each gets its frame and a couple just after.
+    final budget = max - 2;
+    for (final t in anchors) {
+      final i = nearest(t);
+      for (var k = i;
+          k < items.length && timeOf(items[k]) <= timeOf(items[i]) + afterMs;
+          k++) {
+        if (chosen.length >= budget + 2) break;
+        chosen.add(k);
+        if (k - i >= 2) break;
+      }
+      if (chosen.length >= budget + 2) break;
+    }
+    // Fill what is left evenly across the recording.
+    var step = 0;
+    while (chosen.length < max && step < items.length * 2) {
+      final i = ((step * (items.length - 1)) / (max - 1))
+          .round()
+          .clamp(0, items.length - 1);
+      chosen.add(i);
+      step++;
+    }
+    final sorted = chosen.toList()..sort();
+    return [for (final i in sorted.take(max)) items[i]];
+  }
+
   static Future<Uint8List?> compose(List<FilmFrame> frames) async {
     if (frames.isEmpty) return null;
     final chosen = pick(frames);

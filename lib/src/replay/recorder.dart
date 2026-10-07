@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:clock/clock.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'filmstrip.dart';
+import 'overflow_parser.dart';
 import 'probe.dart';
 import 'replay_analyzer.dart';
 import 'replay_models.dart';
@@ -50,6 +52,8 @@ class ReplayRecorder with WidgetsBindingObserver {
   bool _dirty = true;
   bool _resumed = true;
   int _lastFrameT = -100000;
+  int _lastTickT = -100000;
+  bool _forceTick = false;
   int? _manualStart;
   String? _lastScreen;
 
@@ -61,12 +65,15 @@ class ReplayRecorder with WidgetsBindingObserver {
     current = this;
     WidgetsBinding.instance.addObserver(this);
     SchedulerBinding.instance.addTimingsCallback(_onTimings);
+    _hookErrors();
+    final hz = config.fps > config.manualFps ? config.fps : config.manualFps;
     _timer = Timer.periodic(
-        Duration(milliseconds: (1000 / config.fps).round()), (_) => _tick());
+        Duration(milliseconds: (1000 / hz).round()), (_) => _tick());
   }
 
   void dispose() {
     if (current == this) current = null;
+    _unhookErrors();
     _timer?.cancel();
     _manualTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -100,6 +107,40 @@ class ReplayRecorder with WidgetsBindingObserver {
   }
 
   /// A page opened or closed. Called by `FlutterFixObserver`.
+  FlutterExceptionHandler? _previousOnError;
+
+  void _hookErrors() {
+    _previousOnError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      try {
+        noteFlutterError(details.exceptionAsString(), details.toString());
+      } catch (_) {
+        // Never let the recorder get in the way of error reporting.
+      }
+      final previous = _previousOnError;
+      if (previous != null) {
+        previous(details);
+      } else {
+        FlutterError.presentError(details);
+      }
+    };
+  }
+
+  void _unhookErrors() {
+    if (_previousOnError != null) FlutterError.onError = _previousOnError;
+    _previousOnError = null;
+  }
+
+  /// A Flutter error was reported. Layout overflows (the yellow and black
+  /// stripes) are recorded with the widget and the source line that built it.
+  /// Debug builds only: release builds neither draw nor report them.
+  @visibleForTesting
+  void noteFlutterError(String message, String fullText) {
+    final overflow = OverflowParser.parse(message, fullText);
+    if (overflow == null || !_active) return;
+    _events.add(ReplayEvent(nowMs, 'overflow', overflow));
+  }
+
   void noteRoute(String action, String? name, String? previous) {
     if (!_active) return;
     _events.add(ReplayEvent(nowMs, 'route', {
@@ -110,6 +151,11 @@ class ReplayRecorder with WidgetsBindingObserver {
   }
 
   Future<void> _tick() async {
+    // While rolling, sample at [fps]; while recording by hand, at [manualFps].
+    final every = 1000 / (manualActive ? config.manualFps : config.fps);
+    if (nowMs - _lastTickT < every * 0.9 && !_forceTick) return;
+    _lastTickT = nowMs;
+    _forceTick = false;
     if (!_resumed || !_active) {
       _evict();
       return;
@@ -199,6 +245,7 @@ class ReplayRecorder with WidgetsBindingObserver {
     if (from == null) return null;
     // One last frame so the strip ends on what you were looking at.
     _dirty = true;
+    _forceTick = true;
     final end = nowMs;
     await _tick();
     final result = await _compose('manual', from, end);
@@ -219,7 +266,12 @@ class ReplayRecorder with WidgetsBindingObserver {
     final seconds = (end - from) / 1000;
 
     // Clones, because the buffer may drop its images while we are composing.
-    final chosen = Filmstrip.pick(frames);
+    final anchors = [
+      for (final e in events)
+        if (e.kind == 'route' || e.kind == 'overflow') e.t,
+    ];
+    final chosen =
+        Filmstrip.pickKey<_Frame>(frames, (f) => f.t - from, anchors: anchors);
     final clones = [
       for (final f in chosen) FilmFrame(f.t - from, f.image.clone())
     ];

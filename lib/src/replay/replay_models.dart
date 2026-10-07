@@ -7,7 +7,7 @@ class ReplayEvent {
 
   final int t;
 
-  /// `route`, `sample` or `slow`.
+  /// `route`, `sample`, `slow` or `overflow`.
   final String kind;
   final Map<String, Object?> data;
 
@@ -21,6 +21,7 @@ class ReplayConfig {
     this.rollingSeconds = 15,
     this.maxManualSeconds = 30,
     this.fps = 4,
+    this.manualFps = 10,
     this.frameWidth = 240,
     this.slowFrameMs = 32,
   });
@@ -33,8 +34,12 @@ class ReplayConfig {
   /// A manual recording stops by itself after this long.
   final int maxManualSeconds;
 
-  /// Frames per second kept (a few is enough to see a list fill in).
+  /// Frames per second kept while rolling (a few is enough to see a list fill in).
   final int fps;
+
+  /// Frames per second while you are recording by hand, so an animation or a
+  /// screen transition is sampled finely enough to see it move.
+  final int manualFps;
 
   /// Width of each stored frame in pixels.
   final int frameWidth;
