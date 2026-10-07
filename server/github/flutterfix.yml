@@ -17,6 +17,7 @@ on:
     types: [opened, labeled]
 
 permissions:
+  actions: read          # the monthly cap counts this workflow's runs
   contents: write
   pull-requests: write
   issues: write
