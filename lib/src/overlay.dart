@@ -76,6 +76,7 @@ class FlutterFix extends StatefulWidget {
 
 class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
   final GlobalKey _boundaryKey = GlobalKey();
+  final GlobalKey _appKey = GlobalKey();
   ElementInfo? _element;
   Offset _touch = Offset.zero;
   Uint8List? _screenshot;
@@ -305,7 +306,11 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.enabled) return widget.child;
+    // The app sits under a GlobalKey so Flutter can move it between the
+    // positions below without rebuilding it: switching the overlay on or off,
+    // or opening the comment box, must never reset the app's own state.
+    final app = KeyedSubtree(key: _appKey, child: widget.child);
+    if (!widget.enabled) return app;
 
     return Directionality(
       textDirection: TextDirection.ltr,
@@ -328,9 +333,9 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
                   ? MediaQuery(
                       data: MediaQuery.of(context)
                           .removeViewInsets(removeBottom: true),
-                      child: widget.child,
+                      child: app,
                     )
-                  : widget.child,
+                  : app,
             ),
           ),
           if (_composing)

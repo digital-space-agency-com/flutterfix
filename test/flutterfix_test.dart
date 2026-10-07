@@ -30,6 +30,7 @@ Widget app(MemorySink sink, {bool enabled = true}) => MaterialApp(
     );
 
 void main() {
+  stateTests();
   testWidgets('long press, type, send delivers a report with the element',
       (tester) async {
     final sink = MemorySink();
@@ -112,5 +113,67 @@ void main() {
     final f = Fixable('x', child: const SizedBox());
     expect(f.location, isNotNull);
     expect(f.location, contains('flutterfix_test.dart'));
+  });
+}
+
+class _Counter extends StatefulWidget {
+  const _Counter();
+  @override
+  State<_Counter> createState() => _CounterState();
+}
+
+class _CounterState extends State<_Counter> {
+  int count = 0;
+  @override
+  Widget build(BuildContext context) => TextButton(
+        onPressed: () => setState(() => count++),
+        child: Text('count $count'),
+      );
+}
+
+void stateTests() {
+  testWidgets('the app keeps its state when the overlay switches on and off',
+      (tester) async {
+    Future<void> show(bool enabled) => tester.pumpWidget(MaterialApp(
+          builder: (context, child) =>
+              FlutterFix(enabled: enabled, sink: MemorySink(), child: child!),
+          home: const Scaffold(body: Center(child: _Counter())),
+        ));
+
+    await show(false);
+    await tester.tap(find.byType(TextButton));
+    await tester.tap(find.byType(TextButton));
+    await tester.pump();
+    expect(find.text('count 2'), findsOneWidget);
+
+    await show(true);
+    expect(find.text('count 2'), findsOneWidget, reason: 'overlay switched on');
+    await show(false);
+    expect(find.text('count 2'), findsOneWidget,
+        reason: 'overlay switched off');
+  });
+
+  testWidgets('the app keeps its state while the comment box opens and closes',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => FlutterFix(
+        sink: MemorySink(),
+        screenshotter: (_) async => null,
+        child: child!,
+      ),
+      home: const Scaffold(body: Center(child: _Counter())),
+    ));
+    await tester.tap(find.byType(TextButton));
+    await tester.pump();
+    expect(find.text('count 1'), findsOneWidget);
+
+    await tester.longPress(find.byType(TextButton));
+    await tester.pumpAndSettle();
+    expect(find.text('What is wrong here?'), findsOneWidget);
+    expect(find.text('count 1'), findsOneWidget, reason: 'while open');
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('count 1'), findsOneWidget, reason: 'after closing');
   });
 }
