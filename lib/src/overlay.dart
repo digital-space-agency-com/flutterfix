@@ -81,7 +81,6 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
   Offset _touch = Offset.zero;
   Uint8List? _screenshot;
   bool _composing = false;
-  bool _sending = false;
   String? _banner;
   bool _bannerError = false;
   bool _bannerInfo = false;
@@ -191,7 +190,7 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
   }
 
   Future<void> _onLongPress(LongPressStartDetails d) async {
-    if (_composing || _sending || _recording) return;
+    if (_composing || _recording || _preparing) return;
     final screen = MediaQuery.sizeOf(context);
     final info = Inspector.inspect(context, d.globalPosition, screen);
     HapticFeedback.mediumImpact();
@@ -280,32 +279,46 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
     _prepared = _finishPreparing(_session, shotF, replayF);
   }
 
+  int _inFlight = 0;
+
   Future<void> _send() async {
     final comment = _text.text.trim();
-    if (comment.isEmpty || _sending) return;
+    if (comment.isEmpty) return;
     final size = MediaQuery.sizeOf(context);
-    setState(() => _sending = true);
-    _tick.value++;
-    if (_preparing) await _prepared;
+    final prepared = _preparing ? _prepared : null;
+    final element = _element;
+    final touch = _touch;
+    final screenName = widget.screenName?.call();
+    final extra = widget.extra?.call() ?? const <String, String>{};
+
+    // Close the box and carry on in the background: the report can take several
+    // seconds to reach the server (the images are the bulk of it), and nobody
+    // should have to watch that. A retryable failure is kept on the phone anyway.
+    setState(() {
+      _composing = false;
+      _inFlight++;
+    });
+    _showBanner('Sending…', error: false, info: true, hold: true);
+
+    if (prepared != null) {
+      await prepared; // the screenshot and replay finish first
+    }
     if (!mounted) return;
     final report = FixReport(
       comment: comment,
-      element: _element,
-      touch: _touch,
+      element: element,
+      touch: touch,
       screenSize: size,
-      screenName: widget.screenName?.call(),
+      screenName: screenName,
       appVersion: widget.appVersion,
       platform: defaultTargetPlatform.name,
       screenshotPng: _screenshot,
       replay: _attachReplay ? _replay : null,
-      extra: widget.extra?.call() ?? const {},
+      extra: extra,
     );
     final result = await widget.sink.send(report);
     if (!mounted) return;
-    setState(() {
-      _sending = false;
-      _composing = false;
-    });
+    _inFlight--;
     _showBanner(
       result.queued
           ? (result.message ?? 'Saved. Will send when online.')
@@ -314,18 +327,26 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
               : (result.message ?? 'Send failed'),
       error: !result.ok,
       info: result.queued,
+      hold: _inFlight >
+          0, // another report is still on its way: keep "Sending…" up
+      holdText: _inFlight > 0 ? 'Sending…' : null,
     );
     if (result.ok && !result.queued) _flush();
   }
 
-  void _showBanner(String text, {required bool error, bool info = false}) {
+  void _showBanner(String text,
+      {required bool error,
+      bool info = false,
+      bool hold = false,
+      String? holdText}) {
     _bannerTimer?.cancel();
     setState(() {
-      _banner = text;
-      _bannerError = error;
-      _bannerInfo = info;
+      _banner = holdText ?? text;
+      _bannerError = holdText != null ? false : error;
+      _bannerInfo = holdText != null ? true : info;
     });
-    _bannerTimer = Timer(const Duration(seconds: 3), () {
+    if (hold) return; // stays until the report finishes
+    _bannerTimer = Timer(Duration(seconds: error ? 6 : 3), () {
       if (mounted) setState(() => _banner = null);
     });
   }
@@ -467,7 +488,7 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
                     ),
             ),
             TextButton(
-              onPressed: _sending ? null : _startRecording,
+              onPressed: _startRecording,
               child: const Text('Record'),
             ),
           ],
@@ -575,14 +596,14 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
-                        onPressed: _sending ? null : _cancel,
+                        onPressed: _cancel,
                         child: const Text('Cancel'),
                       ),
                       FilledButton(
-                        onPressed: _sending ? null : _send,
+                        onPressed: _send,
                         style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFFFF2D55)),
-                        child: Text(_sending ? 'Sending…' : 'Send'),
+                        child: const Text('Send'),
                       ),
                     ],
                   ),
