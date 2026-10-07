@@ -150,7 +150,7 @@ function describeEvent(e) {
     case 'slow':
       return `slow frame ${e.ms}ms`;
     case 'overflow':
-      return `layout overflow ${e.amount}px on the ${e.edge}${e.file ? ` in ${e.widget || 'a widget'} at ${e.file}${e.line ? ':' + e.line : ''}` : ''}`;
+      return `layout overflow ${e.amount}px on the ${e.edge}${e.file ? ` in ${e.widget || 'a widget'} at ${e.file}${e.line ? ':' + e.line : ''}` : ''}${e.count > 1 ? ` (x${e.count})` : ''}`;
     default:
       return String(e.kind);
   }
