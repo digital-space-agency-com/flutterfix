@@ -389,6 +389,16 @@ The function runs in `europe-west1`; change `REGION` at the top of
 note the function's URL:
 `https://europe-west1-<your-project-id>.cloudfunctions.net/flutterfixReport`
 
+**Storing the Claude token safely.** `claude setup-token` prints a long token that
+your terminal wraps over two lines; copying it picks up the line break, and
+anything else you copy before storing it replaces the clipboard. To avoid both,
+copy the token and then **type** (do not paste) this, which joins the lines, tests
+the token in a fresh Claude setup, and stores it only if it works:
+
+```bash
+scripts/store-claude-token.sh your-org/your-app-repo
+```
+
 **2. Add the workflow to your app repo.**
 
 Copy `server/github/flutterfix.yml` to `.github/workflows/flutterfix.yml` in
@@ -582,6 +592,7 @@ More detail on the function is in [`server/README.md`](server/README.md).
 | "Not allowed to send reports" | The caller is not signed in, their email is not in `FLUTTERFIX_ALLOWED_EMAILS`, or the email is not verified. |
 | "daily limit reached" | The tester sent more than `FLUTTERFIX_DAILY_CAP` today. |
 | The banner says "Saved, will send automatically" | There was no connection. It sends when the app next has one. |
+| The Action fails after about 2 seconds, cost 0 | Claude was refused before starting. Add `show_full_output: true` to the Claude step to read the message. "401 Invalid bearer token" means the stored token is wrong, usually because it was copied across two lines or the clipboard held something else. Re-store it with `scripts/store-claude-token.sh owner/repo`, which tests the token first. |
 | Issue appears but no pull request | The Action did not run: check `FLUTTERFIX_REPORTER` matches the token's owner, the `flutterfix` label exists, a Claude token or `ANTHROPIC_API_KEY` is set, and the monthly cap is not reached (see the Actions tab). |
 | The Action cannot fetch the screenshot | The workflow needs `fetch-depth: 0` (already set) so the `flutterfix-reports` branch is available. |
 | The box covers the element | It moves to the top when the element is in the lower half; if it still overlaps, report it. |
