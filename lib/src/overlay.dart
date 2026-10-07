@@ -95,6 +95,8 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
   ReplayAttachment? _replay;
   bool _attachReplay = true;
   bool _recording = false;
+  bool _preparing = false;
+  Future<void>? _prepared;
   Timer? _recTicker;
 
   @override
@@ -193,27 +195,46 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
     final screen = MediaQuery.sizeOf(context);
     final info = Inspector.inspect(context, d.globalPosition, screen);
     HapticFeedback.mediumImpact();
+
+    // Take the screenshot and the replay of the last seconds right away, but
+    // show the comment box straight away: they finish while you type.
     final recorder = _recorder;
-    final results = await Future.wait<Object?>([
-      _capture(info?.rect),
-      if (recorder != null && recorder.config.rolling)
-        recorder.snapshotRolling()
-      else
-        Future<ReplayAttachment?>.value(null),
-    ]);
-    final shot = results[0] as Uint8List?;
-    final replay = results[1] as ReplayAttachment?;
-    if (!mounted) return;
+    final shotF = _capture(info?.rect);
+    final replayF = recorder != null && recorder.config.rolling
+        ? recorder.snapshotRolling()
+        : Future<ReplayAttachment?>.value(null);
+
     setState(() {
       _touch = d.globalPosition;
       _element = info;
-      _screenshot = shot;
-      _replay = replay;
-      _attachReplay = replay != null;
+      _screenshot = null;
+      _replay = null;
+      _attachReplay = false;
+      _preparing = true;
       _composing = true;
       _session++;
       _text.clear();
     });
+    final session = _session;
+    _prepared = _finishPreparing(session, shotF, replayF);
+  }
+
+  Future<void> _finishPreparing(int session, Future<Uint8List?> shotF,
+      Future<ReplayAttachment?> replayF) async {
+    Uint8List? shot;
+    ReplayAttachment? replay;
+    try {
+      shot = await shotF;
+    } catch (_) {}
+    try {
+      replay = await replayF;
+    } catch (_) {}
+    if (!mounted || session != _session) return;
+    _screenshot = shot;
+    _replay = replay;
+    _attachReplay = replay != null;
+    _preparing = false;
+    _refresh();
   }
 
   Future<Uint8List?> _capture(Rect? rect) async {
@@ -241,32 +262,37 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
   Future<void> _stopRecording() async {
     if (!_recording) return;
     _recTicker?.cancel();
-    setState(() => _recording = false);
-    final replay = await _recorder?.stopManual();
-    final shot = await _capture(null);
-    if (!mounted) return;
+    final replayF =
+        _recorder?.stopManual() ?? Future<ReplayAttachment?>.value(null);
+    final shotF = _capture(null);
     setState(() {
+      _recording = false;
       _element = null;
       _touch = Offset.zero;
-      _screenshot = shot;
-      _replay = replay;
-      _attachReplay = replay != null;
+      _screenshot = null;
+      _replay = null;
+      _attachReplay = false;
+      _preparing = true;
       _composing = true;
       _session++;
       _text.clear();
     });
+    _prepared = _finishPreparing(_session, shotF, replayF);
   }
 
   Future<void> _send() async {
     final comment = _text.text.trim();
     if (comment.isEmpty || _sending) return;
+    final size = MediaQuery.sizeOf(context);
     setState(() => _sending = true);
     _tick.value++;
+    if (_preparing) await _prepared;
+    if (!mounted) return;
     final report = FixReport(
       comment: comment,
       element: _element,
       touch: _touch,
-      screenSize: MediaQuery.sizeOf(context),
+      screenSize: size,
       screenName: widget.screenName?.call(),
       appVersion: widget.appVersion,
       platform: defaultTargetPlatform.name,
@@ -411,8 +437,9 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
           children: [
             Expanded(
               child: r == null
-                  ? const Text('No replay yet',
-                      style: TextStyle(color: Colors.white38, fontSize: 12))
+                  ? Text(_preparing ? 'Preparing replay…' : 'No replay yet',
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 12))
                   : GestureDetector(
                       onTap: () {
                         _attachReplay = !_attachReplay;

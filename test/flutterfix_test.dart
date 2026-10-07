@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -30,6 +31,7 @@ Widget app(MemorySink sink, {bool enabled = true}) => MaterialApp(
     );
 
 void main() {
+  promptTests();
   stateTests();
   testWidgets('long press, type, send delivers a report with the element',
       (tester) async {
@@ -175,5 +177,62 @@ void stateTests() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('count 1'), findsOneWidget, reason: 'after closing');
+  });
+}
+
+void promptTests() {
+  testWidgets(
+      'the comment box opens at once, even while the screenshot is slow',
+      (tester) async {
+    final shot = Completer<Uint8List?>();
+    final sink = MemorySink();
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => FlutterFix(
+        sink: sink,
+        screenshotter: (_) => shot.future,
+        child: child!,
+      ),
+      home: const Scaffold(body: Center(child: Text('Hello'))),
+    ));
+
+    await tester.longPress(find.text('Hello'));
+    await tester.pump();
+    expect(find.text('What is wrong here?'), findsOneWidget,
+        reason: 'no waiting for the screenshot');
+    expect(sink.reports, isEmpty);
+
+    // Type and send while the screenshot is still being taken: the report
+    // waits for it, then goes out with it.
+    await tester.enterText(find.byType(TextField), 'Looks off');
+    await tester.tap(find.text('Send'));
+    await tester.pump();
+    expect(sink.reports, isEmpty, reason: 'waiting for the screenshot');
+
+    shot.complete(Uint8List.fromList([7, 7, 7]));
+    await tester.pumpAndSettle();
+    expect(sink.reports, hasLength(1));
+    expect(sink.reports.single.screenshotPng, [7, 7, 7]);
+    expect(sink.reports.single.comment, 'Looks off');
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('cancelling before the screenshot arrives is harmless',
+      (tester) async {
+    final shot = Completer<Uint8List?>();
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => FlutterFix(
+        sink: MemorySink(),
+        screenshotter: (_) => shot.future,
+        child: child!,
+      ),
+      home: const Scaffold(body: Center(child: Text('Hello'))),
+    ));
+    await tester.longPress(find.text('Hello'));
+    await tester.pump();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    shot.complete(Uint8List.fromList([1]));
+    await tester.pumpAndSettle();
+    expect(find.text('What is wrong here?'), findsNothing);
   });
 }
