@@ -23,10 +23,26 @@ const report = {
 test('allow list is case and space insensitive', () => {
   const list = parseAllowList(' Dave@X.com , b@y.com ,, ');
   assert.deepEqual(list, ['dave@x.com', 'b@y.com']);
-  assert.equal(isAllowed('DAVE@x.com', list), true);
-  assert.equal(isAllowed('eve@z.com', list), false);
-  assert.equal(isAllowed(undefined, list), false);
-  assert.equal(isAllowed('a@b.com', []), false);
+  assert.equal(isAllowed('DAVE@x.com', list, true), true);
+  assert.equal(isAllowed('eve@z.com', list, true), false);
+  assert.equal(isAllowed(undefined, list, true), false);
+  assert.equal(isAllowed('a@b.com', [], true), false);
+});
+
+test('a domain entry allows everyone at that domain, and only that domain', () => {
+  const list = parseAllowList('*@reelmatch.app');
+  assert.equal(isAllowed('hey@reelmatch.app', list, true), true);
+  assert.equal(isAllowed('hey+iOS@ReelMatch.app', list, true), true);
+  assert.equal(isAllowed('hey@evil-reelmatch.app', list, true), false);
+  assert.equal(isAllowed('hey@reelmatch.app.evil.com', list, true), false);
+  assert.equal(isAllowed('hey@sub.reelmatch.app', list, true), false);
+  assert.equal(isAllowed('reelmatch.app', list, true), false);
+});
+
+test('an unverified address is never allowed', () => {
+  assert.equal(isAllowed('hey@reelmatch.app', ['*@reelmatch.app'], false), false);
+  assert.equal(isAllowed('hey@reelmatch.app', ['*@reelmatch.app'], undefined), false);
+  assert.equal(isAllowed('a@b.com', ['a@b.com'], false), false);
 });
 
 test('validateReport accepts a normal report and rejects bad ones', () => {

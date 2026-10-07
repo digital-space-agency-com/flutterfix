@@ -5,7 +5,10 @@
 const MAX_COMMENT = 2000;
 const MAX_SCREENSHOT_BYTES = 6 * 1024 * 1024;
 
-/** Lower-cased list from "a@x.com, B@y.com". */
+/**
+ * Lower-cased list from "a@x.com, *@reelmatch.app". An entry is either one
+ * address or `*@domain` to allow everyone at that domain.
+ */
 function parseAllowList(text) {
   return String(text || '')
     .split(',')
@@ -13,9 +16,20 @@ function parseAllowList(text) {
     .filter(Boolean);
 }
 
-function isAllowed(email, allowList) {
-  if (!email) return false;
-  return allowList.includes(String(email).trim().toLowerCase());
+/**
+ * Whether [email] may send reports. The address must be verified: Firebase
+ * lets anyone sign up with an address they do not own, so an unverified
+ * `x@reelmatch.app` proves nothing.
+ */
+function isAllowed(email, allowList, emailVerified) {
+  if (!email || emailVerified !== true) return false;
+  const e = String(email).trim().toLowerCase();
+  const at = e.lastIndexOf('@');
+  if (at < 1) return false;
+  const domain = e.slice(at + 1);
+  return allowList.some((entry) =>
+    entry.startsWith('*@') ? entry.slice(2) === domain : entry === e,
+  );
 }
 
 /** Returns a list of problems; empty means the body is usable. */

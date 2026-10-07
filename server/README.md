@@ -38,7 +38,7 @@ firebase deploy --only functions:flutterfixReport
 ```
 
 It asks for `FLUTTERFIX_GITHUB_REPO` (`owner/app-repo`) and
-`FLUTTERFIX_ALLOWED_EMAILS` (`you@x.com,tester@y.com`) when you deploy. You can also
+`FLUTTERFIX_ALLOWED_EMAILS` (`*@yourdomain.com,tester@gmail.com`) when you deploy. You can also
 put them in `server/functions/.env.<project-id>`.
 
 `FLUTTERFIX_GITHUB_TOKEN`: a fine-grained personal access token on the app repo with

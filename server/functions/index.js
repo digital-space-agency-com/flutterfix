@@ -27,12 +27,15 @@ exports.flutterfixReport = onRequest(
     const idToken = auth.startsWith('Bearer ') ? auth.slice(7) : null;
     if (!idToken) return void res.status(401).json({ error: 'sign in first' });
     let email;
+    let verified;
     try {
-      email = (await admin.auth().verifyIdToken(idToken)).email;
+      const decoded = await admin.auth().verifyIdToken(idToken);
+      email = decoded.email;
+      verified = decoded.email_verified;
     } catch (_) {
       return void res.status(401).json({ error: 'invalid sign-in' });
     }
-    if (!isAllowed(email, parseAllowList(ALLOWED.value()))) {
+    if (!isAllowed(email, parseAllowList(ALLOWED.value()), verified)) {
       return void res.status(403).json({ error: 'not a tester' });
     }
 

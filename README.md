@@ -206,11 +206,12 @@ FlutterFix(
 
 Choose `isTester` to suit the app. Two common ways:
 
-- **A list of tester emails** (simple and safe, since the server checks it too):
+- **Your own domain, or a list of emails** (simple and safe, since the server
+  checks it too; this is only to decide whether to show the overlay):
 
   ```dart
-  const testers = {'you@example.com', 'tester@example.com'};
-  final isTester = testers.contains(FirebaseAuth.instance.currentUser?.email);
+  final email = FirebaseAuth.instance.currentUser?.email ?? '';
+  final isTester = email.endsWith('@example.com');
   ```
 
 - **A Remote Config flag**, so you can switch it off for everyone from the console:
@@ -284,8 +285,14 @@ During deploy it asks for two values (or put them in
 
 ```
 FLUTTERFIX_GITHUB_REPO=your-org/your-app-repo
-FLUTTERFIX_ALLOWED_EMAILS=you@example.com,tester@example.com
+FLUTTERFIX_ALLOWED_EMAILS=*@example.com,tester@gmail.com
 ```
+
+Each entry is either one address or `*@domain` to allow everyone at a domain
+(for example `*@reelmatch.app`). The address must also be **verified** in
+Firebase: anyone can sign up with an email they do not own, so an unverified
+`x@yourdomain.com` is refused. Sign in with Apple or Google, or email
+verification in your app, gives you verified addresses.
 
 Create the token at GitHub, Settings, Developer settings, Fine-grained tokens:
 choose your app repo only, with **Contents: read and write** and **Issues: read
@@ -359,7 +366,7 @@ A checklist of everything specific to the app. Search these placeholders.
 | Where reports go | `sink:` on `FlutterFix` | `LocalReceiverSink()` at your Mac; `OutboxSink(HttpSink(...))` for the cloud route |
 | Function URL | `HttpSink(Uri.parse(...))` | Your deployed function URL |
 | Your GitHub repo | `FLUTTERFIX_GITHUB_REPO` (function) | `your-org/your-app-repo` |
-| Tester emails | `FLUTTERFIX_ALLOWED_EMAILS` (function) and your `isTester` check | Your emails |
+| Tester emails | `FLUTTERFIX_ALLOWED_EMAILS` (function) and your `isTester` check | Your emails, or `*@yourdomain.com` |
 | Daily limit per tester | `FLUTTERFIX_DAILY_CAP` (function) | A number; default 20 |
 | GitHub token | Firebase secret `FLUTTERFIX_GITHUB_TOKEN` | A fine-grained token on your app repo |
 | Reporter account | Variable `FLUTTERFIX_REPORTER` (workflow) | Owner of that token |
@@ -434,7 +441,7 @@ the same port fails.
 |---|---|---|
 | `FLUTTERFIX_GITHUB_TOKEN` | Firebase secret | Token used to file issues and store screenshots. |
 | `FLUTTERFIX_GITHUB_REPO` | Function parameter | `owner/repo` that receives the issues. |
-| `FLUTTERFIX_ALLOWED_EMAILS` | Function parameter | Comma-separated emails allowed to send. |
+| `FLUTTERFIX_ALLOWED_EMAILS` | Function parameter | Comma-separated addresses or `*@domain` entries allowed to send. Must be verified. |
 | `FLUTTERFIX_DAILY_CAP` | Function parameter | Reports per tester per day. Default 20. |
 | `ANTHROPIC_API_KEY` | GitHub secret | Runs Claude in the Action. |
 | `FLUTTERFIX_REPORTER` | GitHub variable | The only issue author the workflow trusts. |
@@ -473,7 +480,7 @@ More detail on the function is in [`server/README.md`](server/README.md).
 | "Could not reach the receiver" | The receiver is not running (`dart run flutterfix:receiver`), or on a phone the `host` is wrong or the phone is not on the same Wi-Fi. |
 | Android emulator cannot reach the Mac | Add the debug `usesCleartextTraffic` manifest from the table above. |
 | Real iPhone cannot reach the Mac | Add the local-network settings to `Info.plist`; accept the iOS local network prompt. |
-| "Not allowed to send reports" | The caller is not signed in, or their email is not in `FLUTTERFIX_ALLOWED_EMAILS`. |
+| "Not allowed to send reports" | The caller is not signed in, their email is not in `FLUTTERFIX_ALLOWED_EMAILS`, or the email is not verified. |
 | "daily limit reached" | The tester sent more than `FLUTTERFIX_DAILY_CAP` today. |
 | The banner says "Saved, will send automatically" | There was no connection. It sends when the app next has one. |
 | Issue appears but no pull request | The Action did not run: check `FLUTTERFIX_REPORTER` matches the token's owner, the `flutterfix` label exists, `ANTHROPIC_API_KEY` is set, and the monthly cap is not reached (see the Actions tab). |
