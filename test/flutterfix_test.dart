@@ -31,6 +31,7 @@ Widget app(MemorySink sink, {bool enabled = true}) => MaterialApp(
     );
 
 void main() {
+  optimisticTests();
   promptTests();
   stateTests();
   testWidgets('long press, type, send delivers a report with the element',
@@ -234,5 +235,80 @@ void promptTests() {
     shot.complete(Uint8List.fromList([1]));
     await tester.pumpAndSettle();
     expect(find.text('What is wrong here?'), findsNothing);
+  });
+}
+
+/// A sink that stays "busy" until the test lets it finish.
+class _SlowSink extends FlutterFixSink {
+  final done = Completer<FixSendResult>();
+  final sent = <FixReport>[];
+  @override
+  Future<FixSendResult> send(FixReport report) {
+    sent.add(report);
+    return done.future;
+  }
+}
+
+void optimisticTests() {
+  testWidgets('Send closes the box at once and the upload carries on behind it',
+      (tester) async {
+    final sink = _SlowSink();
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => FlutterFix(
+        sink: sink,
+        screenshotter: (_) async => Uint8List.fromList([1]),
+        child: child!,
+      ),
+      home: const Scaffold(body: Center(child: Text('Hello'))),
+    ));
+
+    await tester.longPress(find.text('Hello'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Looks off');
+    await tester.tap(find.text('Send'));
+    await tester.pump();
+
+    // The box is gone while the sink is still working.
+    expect(find.text('What is wrong here?'), findsNothing);
+    expect(find.text('Sending…'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+    expect(find.text('Sending…'), findsOneWidget,
+        reason: 'the banner stays up while the upload is in progress');
+
+    sink.done.complete(const FixSendResult.ok('#7'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Sent #7 to Claude'), findsOneWidget);
+    expect(sink.sent.single.comment, 'Looks off');
+    await tester.pump(const Duration(seconds: 4));
+    expect(find.text('Sent #7 to Claude'), findsNothing);
+  });
+
+  testWidgets(
+      'a failure that cannot be retried stays on screen long enough to read',
+      (tester) async {
+    final sink = _SlowSink();
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => FlutterFix(
+        sink: sink,
+        screenshotter: (_) async => null,
+        child: child!,
+      ),
+      home: const Scaffold(body: Center(child: Text('Hello'))),
+    ));
+    await tester.longPress(find.text('Hello'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'x');
+    await tester.tap(find.text('Send'));
+    await tester.pump();
+    sink.done.complete(const FixSendResult.failed('Not allowed to send reports',
+        retryable: false));
+    await tester.pump();
+    expect(find.text('Not allowed to send reports'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    expect(find.text('Not allowed to send reports'), findsOneWidget,
+        reason: 'errors stay up for 6 seconds, not 3');
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('Not allowed to send reports'), findsNothing);
   });
 }
