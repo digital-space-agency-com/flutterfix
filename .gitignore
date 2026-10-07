@@ -2,6 +2,6 @@
 .packages
 build/
 pubspec.lock
-.fixlens/
+.flutterfix/
 .idea/
 .DS_Store

@@ -2,10 +2,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fixlens/fixlens.dart';
+import 'package:flutterfix/flutterfix.dart';
 
 Widget app(MemorySink sink, {bool enabled = true}) => MaterialApp(
-      builder: (context, child) => FixLens(
+      builder: (context, child) => FlutterFix(
         enabled: enabled,
         sink: sink,
         appVersion: '1.0.0+1',
@@ -75,7 +75,7 @@ void main() {
     final sink = MemorySink();
     var taps = 0;
     await tester.pumpWidget(MaterialApp(
-      builder: (c, child) => FixLens(sink: sink, child: child!),
+      builder: (c, child) => FlutterFix(sink: sink, child: child!),
       home: Scaffold(
         body: Center(
           child: ElevatedButton(
@@ -111,6 +111,6 @@ void main() {
   test('Fixable records its call site in debug builds', () {
     final f = Fixable('x', child: const SizedBox());
     expect(f.location, isNotNull);
-    expect(f.location, contains('fixlens_test.dart'));
+    expect(f.location, contains('flutterfix_test.dart'));
   });
 }

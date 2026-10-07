@@ -1,13 +1,13 @@
-// Receives FixLens reports from a running app and prints one line per report,
+// Receives FlutterFix reports from a running app and prints one line per report,
 // so a Claude Code session can pick them up (start it with the Monitor tool).
 //
-//   dart run fixlens:receiver [--port 4747] [--out .fixlens]
+//   dart run flutterfix:receiver [--port 4747] [--out .flutterfix]
 import 'dart:convert';
 import 'dart:io';
 
 Future<void> main(List<String> args) async {
   var port = 4747;
-  var out = '.fixlens';
+  var out = '.flutterfix';
   for (var i = 0; i < args.length - 1; i++) {
     if (args[i] == '--port') port = int.parse(args[i + 1]);
     if (args[i] == '--out') out = args[i + 1];
@@ -21,7 +21,7 @@ Future<void> main(List<String> args) async {
 
   final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
   stdout
-      .writeln('fixlens receiver listening on :$port, writing to $out/reports');
+      .writeln('flutterfix receiver listening on :$port, writing to $out/reports');
 
   await for (final req in server) {
     try {
@@ -73,7 +73,7 @@ Future<void> main(List<String> args) async {
         ..write(jsonEncode({'ok': true, 'id': id}));
       await req.response.close();
     } catch (e) {
-      stdout.writeln('fixlens receiver error: $e');
+      stdout.writeln('flutterfix receiver error: $e');
       req.response.statusCode = 500;
       await req.response.close();
     }

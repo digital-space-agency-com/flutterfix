@@ -8,16 +8,16 @@ import 'report.dart';
 
 /// Where a report goes. Implement this to send reports somewhere else (a
 /// Firebase function, a GitHub issue, a chat message, ...).
-abstract class FixLensSink {
-  const FixLensSink();
+abstract class FlutterFixSink {
+  const FlutterFixSink();
 
   Future<FixSendResult> send(FixReport report);
 }
 
 /// Sends to the receiver that runs next to Claude Code on your Mac
-/// (`dart run fixlens:receiver`). Works from the iOS simulator and the Android
+/// (`dart run flutterfix:receiver`). Works from the iOS simulator and the Android
 /// emulator; for a real phone on the same Wi-Fi pass the Mac's address as [host].
-class LocalReceiverSink extends FixLensSink {
+class LocalReceiverSink extends FlutterFixSink {
   const LocalReceiverSink({this.host, this.port = 4747});
 
   /// Defaults to 10.0.2.2 on Android (the emulator's name for the Mac) and
@@ -52,7 +52,7 @@ class LocalReceiverSink extends FixLensSink {
       return FixSendResult.ok(id ?? '?');
     } on SocketException {
       return const FixSendResult.failed(
-          'Could not reach the receiver. Run: dart run fixlens:receiver');
+          'Could not reach the receiver. Run: dart run flutterfix:receiver');
     } on TimeoutException {
       return const FixSendResult.failed('The receiver took too long to answer');
     } catch (e) {
@@ -64,7 +64,7 @@ class LocalReceiverSink extends FixLensSink {
 }
 
 /// Keeps reports in memory. For tests and demos.
-class MemorySink extends FixLensSink {
+class MemorySink extends FlutterFixSink {
   MemorySink();
 
   final List<FixReport> reports = [];

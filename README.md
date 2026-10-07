@@ -1,4 +1,4 @@
-# FixLens
+# FlutterFix
 
 Long press any element of a Flutter app, say what is wrong, and the report
 lands in your Claude Code session: the element, its text, the widget it came
@@ -13,13 +13,13 @@ it into the view tree.
 
 ```yaml
 dependencies:
-  fixlens:
-    path: ../fixlens   # or a git url once this lives in a repo
+  flutterfix:
+    path: ../flutterfix   # or a git url once this lives in a repo
 ```
 
 ```dart
 MaterialApp(
-  builder: (context, child) => FixLens(
+  builder: (context, child) => FlutterFix(
     enabled: kDebugMode,                 // or a Remote Config flag for testers
     sink: const LocalReceiverSink(),     // sends to your Mac
     appVersion: '1.2.3+45',
@@ -29,7 +29,7 @@ MaterialApp(
 )
 ```
 
-Put `FixLens` in `MaterialApp.builder` (or `MaterialApp.router`'s builder) so it
+Put `FlutterFix` in `MaterialApp.builder` (or `MaterialApp.router`'s builder) so it
 wraps the whole app, above the navigator.
 
 ### Name an element (optional)
@@ -49,21 +49,21 @@ of widgets that built them (debug builds).
 In the project folder:
 
 ```bash
-dart run fixlens:receiver
+dart run flutterfix:receiver
 ```
 
 Better, start it from the Claude Code session with the Monitor tool so every
 report arrives in the conversation as one line:
 
 ```
-[fix r3] welcome.title · lib/screens/onboarding/onboarding_screen.dart:139 · RenderParagraph · text "Stop Scrolling. Start Watching." · .fixlens/reports/r3.png :: Make this smaller
+[fix r3] welcome.title · lib/screens/onboarding/onboarding_screen.dart:139 · RenderParagraph · text "Stop Scrolling. Start Watching." · .flutterfix/reports/r3.png :: Make this smaller
 ```
 
-Reports and screenshots are saved in `.fixlens/reports/` (add `.fixlens/` to
+Reports and screenshots are saved in `.flutterfix/reports/` (add `.flutterfix/` to
 `.gitignore`). Allow Claude to read them without asking:
 
 ```json
-{ "permissions": { "allow": ["Read(./.fixlens/**)"] } }
+{ "permissions": { "allow": ["Read(./.flutterfix/**)"] } }
 ```
 
 The Android emulator reaches your Mac as `10.0.2.2` (handled automatically).
@@ -72,7 +72,7 @@ A real phone on the same Wi-Fi needs the Mac's address:
 
 ## Other destinations
 
-Implement `FixLensSink` to send reports anywhere (Firestore, a GitHub issue,
+Implement `FlutterFixSink` to send reports anywhere (Firestore, a GitHub issue,
 a chat). That is how reports get to Claude when you are away from your Mac.
 
 ## Status

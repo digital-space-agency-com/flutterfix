@@ -16,7 +16,7 @@ import 'sink.dart';
 ///
 /// ```dart
 /// MaterialApp(
-///   builder: (context, child) => FixLens(
+///   builder: (context, child) => FlutterFix(
 ///     enabled: kDebugMode,
 ///     sink: const LocalReceiverSink(),
 ///     child: child!,
@@ -27,8 +27,8 @@ import 'sink.dart';
 /// When [enabled] is false the child is returned unchanged, so a release build
 /// pays nothing. For internal test builds, pass a flag you control (Remote
 /// Config, a signed-in tester list, ...).
-class FixLens extends StatefulWidget {
-  const FixLens({
+class FlutterFix extends StatefulWidget {
+  const FlutterFix({
     super.key,
     required this.child,
     required this.sink,
@@ -41,7 +41,7 @@ class FixLens extends StatefulWidget {
   });
 
   final Widget child;
-  final FixLensSink sink;
+  final FlutterFixSink sink;
   final bool enabled;
 
   /// Name of the screen on display, e.g. from your router. Sent with reports.
@@ -58,10 +58,10 @@ class FixLens extends StatefulWidget {
   final Future<Uint8List?> Function(Rect? highlight)? screenshotter;
 
   @override
-  State<FixLens> createState() => _FixLensState();
+  State<FlutterFix> createState() => _FlutterFixState();
 }
 
-class _FixLensState extends State<FixLens> {
+class _FlutterFixState extends State<FlutterFix> {
   final GlobalKey _boundaryKey = GlobalKey();
   ElementInfo? _element;
   Offset _touch = Offset.zero;
