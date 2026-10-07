@@ -5,6 +5,33 @@ in front of Claude: the element, its text, the widgets that built it, a
 screenshot with the element outlined, and your words. Claude finds the code and
 fixes it.
 
+## The problem it solves
+
+You use the apps you build. You spot something: a button that is a few pixels off,
+a list that took ages to fill, a card that overflows for a moment while it
+animates. You are on your phone, nowhere near your Mac.
+
+Writing it up properly takes longer than fixing it would. Which screen? What was
+on it? What did it look like a second ago? So you tell yourself you will remember,
+and you do not.
+
+FlutterFix removes the write-up *and* the Mac:
+
+1. **Report it in the app, on the move.** Long press the thing, type one sentence.
+   The element, its text, a screenshot and a replay of the seconds before you
+   pressed are attached for you.
+2. **Claude makes the fix.** The report becomes a GitHub issue. Claude reads it,
+   finds the code and opens a pull request. You are not at a computer; nothing
+   needs one.
+3. **Check it on the move too.** Your usual checks run on the pull request. You
+   read the change, and merge it, in the GitHub mobile app.
+4. **Install the next build** and see it fixed.
+
+Nothing is merged for you. You still decide. You just are not tied to a desk to
+do it.
+
+## Two ways to use it
+
 It works two ways:
 
 | | At your Mac | Away from your Mac (phone, 5G) |
@@ -257,7 +284,8 @@ also feeds the replay: when it changes, that counts as a page change.
 | `rolling` | `true` | Keep the last seconds at all times. Set `false` for manual recording only. |
 | `rollingSeconds` | `15` | How much is kept, ending at the moment the comment box opens. |
 | `maxManualSeconds` | `30` | A manual recording stops by itself after this. |
-| `fps` | `4` | Frames kept per second. A few is enough to see a list fill in. |
+| `fps` | `4` | Frames kept per second while rolling. A few is enough to see a list fill in. |
+| `manualFps` | `10` | Frames per second while you record by hand, so animations and transitions show. |
 | `frameWidth` | `240` | Width of each stored frame in pixels. |
 | `slowFrameMs` | `32` | A frame slower than this is reported. |
 
@@ -269,6 +297,46 @@ the foreground. It is off in release builds for real users like everything else.
 slower than release, so a debug run exaggerates jank. Empty and late-loading
 lists are real in either. For performance, use a profile or release build
 (TestFlight or Play internal), where the same replay is accurate.
+
+---
+
+### Layout overflows
+
+The yellow and black stripes. A `RenderFlex overflowed by 156 pixels on the bottom`
+often appears for a moment while a screen animates in, then clears, so a
+screenshot misses it and you cannot say where it came from.
+
+With the replay on, FlutterFix listens for these errors and records each one with
+the widget and **the file and line that built it**:
+
+```
+Layout overflow: bottom edge overflowed by 156 pixels in Column at lib/screens/home/card_front.dart:418 (first at +2.1s, seen 3 times).
+```
+
+That points Claude straight at the code, with no need to find it from a picture.
+Repeats at the same place are folded into one finding with the largest size.
+
+This works in **debug builds** (simulator, emulator, a phone running a debug build).
+Flutter neither draws nor reports overflows in release builds, so a TestFlight or
+Play build will not show them: reproduce those on a debug build.
+
+### Animations and screen transitions
+
+An animation is gone before you can describe it. Two things help:
+
+- **The replay ends the moment you press**, so if you report straight after seeing
+  it, the last 15 seconds include it.
+- **Press Record, repeat it, then stop.** While recording by hand FlutterFix samples
+  at `manualFps` (10 frames a second by default, up from 4 while rolling), so a
+  transition is sampled finely enough to see it move.
+
+The film strip does not just space its 12 frames evenly. It keeps the frames at each
+page change or overflow and the ones just after, so a half-second transition is
+shown as it plays instead of falling between frames.
+
+It is a strip of still frames with times, not a video: Claude reads images, not
+video, and that is what lets it spot "the list was empty until +3.2s". For a clip
+you want to watch yourself, record the simulator or phone screen as usual.
 
 ---
 
@@ -600,12 +668,15 @@ More detail on the function is in [`server/README.md`](server/README.md).
 | The replay says "No replay yet" | `replay:` is not set on `FlutterFix`, or the app only just started: wait a second or two. |
 | The replay never mentions page changes | Add `FlutterFixObserver()` to the navigator, or pass `screenName`. |
 | Lots of slow frames in a debug build | Normal: debug is slower. Check on a profile or release build. |
+| No overflows reported | Only debug builds report them. Release builds neither draw nor report overflows. |
+| Sending seems slow | The box closes at once and a "Sending…" banner shows; the upload (mostly the images) takes about 5 seconds and continues in the background. |
 
 ---
 
 ## Limits
 
 - Mobile and desktop only: it uses `dart:io`, so it does not compile for Flutter web.
+- Overflow capture needs a debug build (Flutter does not report overflows in release).
 - It finds elements by hit testing and reading drawn text. Custom painted
   content (a game canvas) is reported as one element.
 - Text inside platform views (maps, web views, video players) is not seen.

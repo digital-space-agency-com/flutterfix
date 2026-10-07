@@ -149,6 +149,8 @@ function describeEvent(e) {
       return `list shows ${e.items} items`;
     case 'slow':
       return `slow frame ${e.ms}ms`;
+    case 'overflow':
+      return `layout overflow ${e.amount}px on the ${e.edge}${e.file ? ` in ${e.widget || 'a widget'} at ${e.file}${e.line ? ':' + e.line : ''}` : ''}`;
     default:
       return String(e.kind);
   }

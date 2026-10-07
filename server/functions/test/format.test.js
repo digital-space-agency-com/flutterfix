@@ -124,3 +124,23 @@ test('an oversized replay film strip is rejected', () => {
   assert.ok(validateReport({ comment: 'x', replay: { filmstripPngBase64: big } }).length > 0);
   assert.deepEqual(validateReport({ comment: 'x', replay: { summary: 'ok' } }), []);
 });
+
+test('overflow events are described with the widget and the line', () => {
+  const { body } = buildIssue(
+    {
+      comment: 'Card looks cut off',
+      replay: {
+        mode: 'rolling',
+        seconds: 15,
+        frames: 40,
+        summary: 'Layout overflow: bottom edge overflowed by 156 pixels in Column at lib/screens/home/card_front.dart:418 (first at +2.1s).',
+        timeline: [
+          { t: 2100, kind: 'overflow', amount: 156, edge: 'bottom', widget: 'Column', file: 'lib/screens/home/card_front.dart', line: 418 },
+        ],
+      },
+    },
+    { id: 'r5', repo: 'o/a', branch: 'b' },
+  );
+  assert.match(body, /Layout overflow: bottom edge overflowed by 156 pixels in Column at lib\/screens\/home\/card_front\.dart:418/);
+  assert.match(body, /\+2\.1s layout overflow 156px on the bottom in Column at lib\/screens\/home\/card_front\.dart:418/);
+});

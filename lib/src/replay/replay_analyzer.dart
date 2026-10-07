@@ -13,7 +13,7 @@ class ReplayAnalysis {
 
   String summaryFor(double seconds) => findings.isEmpty
       ? 'Nothing stood out in the last ${seconds.toStringAsFixed(1)}s: no slow '
-          'frames and no empty lists.'
+          'frames, no empty lists and no layout overflows.'
       : findings.join('\n');
 }
 
@@ -36,6 +36,7 @@ class ReplayAnalyzer {
     final samples = sorted.where((e) => e.kind == 'sample').toList();
     final routes = sorted.where((e) => e.kind == 'route').toList();
     final slow = sorted.where((e) => e.kind == 'slow').toList();
+    final overflows = sorted.where((e) => e.kind == 'overflow').toList();
 
     // ---- timeline: routes, list changes, slow frames ----
     for (final r in routes) {
@@ -53,6 +54,36 @@ class ReplayAnalyzer {
       timeline.add(s.toJson());
     }
     timeline.sort((a, b) => (a['t'] as int).compareTo(b['t'] as int));
+
+    for (final o in overflows) {
+      timeline.add(o.toJson());
+    }
+    timeline.sort((a, b) => (a['t'] as int).compareTo(b['t'] as int));
+
+    // ---- layout overflows: one finding per place, however often it repeats ----
+    final byPlace = <String, List<ReplayEvent>>{};
+    for (final o in overflows) {
+      final key = '${o.data['file']}:${o.data['line']}:${o.data['widget']}';
+      byPlace.putIfAbsent(key, () => []).add(o);
+    }
+    for (final group in byPlace.values) {
+      final first = group.first;
+      final worst = group
+          .map((e) => ((e.data['amount'] as num?) ?? 0).toDouble())
+          .reduce((a, b) => a > b ? a : b);
+      final px = worst == worst.roundToDouble()
+          ? worst.toInt().toString()
+          : worst.toStringAsFixed(1);
+      final widget = first.data['widget'] as String?;
+      final file = first.data['file'] as String?;
+      final line = first.data['line'];
+      final where = file == null
+          ? ''
+          : ' in ${widget ?? 'a widget'} at $file${line == null ? '' : ':$line'}';
+      final times = group.length == 1 ? '' : ', seen ${group.length} times';
+      findings.add('Layout overflow: ${first.data['edge']} edge overflowed by '
+          '$px pixels$where (first at ${_at(first.t)}$times).');
+    }
 
     // ---- slow frames ----
     if (slow.isNotEmpty) {
