@@ -338,7 +338,7 @@ phone ──(HTTPS, signed in)──▶ Firebase function ──▶ GitHub issue
 | Firebase Authentication in the app | The function checks who is sending | Free |
 | A GitHub repository for the app | Receives the issues and pull requests | Free |
 | A GitHub fine-grained access token | Lets the function create issues | Free |
-| An Anthropic API key | Lets the GitHub Action run Claude | Per use; the monthly cap limits it |
+| A Claude subscription token **or** an Anthropic API key | Lets the GitHub Action run Claude | Subscription: no extra cost, counts against your plan's limits. API key: pay per use (cents a run); the monthly cap limits it |
 | Node 20 and the Firebase CLI | To deploy the function | Free |
 
 ### Step by step
@@ -389,6 +389,16 @@ The function runs in `europe-west1`; change `REGION` at the top of
 note the function's URL:
 `https://europe-west1-<your-project-id>.cloudfunctions.net/flutterfixReport`
 
+**Storing the Claude token safely.** `claude setup-token` prints a long token that
+your terminal wraps over two lines; copying it picks up the line break, and
+anything else you copy before storing it replaces the clipboard. To avoid both,
+copy the token and then **type** (do not paste) this, which joins the lines, tests
+the token in a fresh Claude setup, and stores it only if it works:
+
+```bash
+scripts/store-claude-token.sh your-org/your-app-repo
+```
+
 **2. Add the workflow to your app repo.**
 
 Copy `server/github/flutterfix.yml` to `.github/workflows/flutterfix.yml` in
@@ -396,7 +406,8 @@ your app repo. Then in the repo, Settings, Secrets and variables, Actions:
 
 | Kind | Name | Value |
 |---|---|---|
-| Secret | `ANTHROPIC_API_KEY` | Your Anthropic API key |
+| Secret | `CLAUDE_CODE_OAUTH_TOKEN` | A token from your Claude Pro or Max plan (run `claude setup-token` in Terminal). The workflow uses this first. |
+| Secret (alternative) | `ANTHROPIC_API_KEY` | An Anthropic API key, used only if the token above is not set. Billed per use. |
 | Variable | `FLUTTERFIX_REPORTER` | The GitHub username that owns the token from step 1 |
 | Variable (optional) | `FLUTTERFIX_MONTHLY_CAP` | Most runs a month; default 30 |
 | Variable (optional) | `FLUTTER_VERSION` | Flutter version for the runner; default 3.47.5 |
@@ -457,7 +468,7 @@ A checklist of everything specific to the app. Search these placeholders.
 | Daily limit per tester | `FLUTTERFIX_DAILY_CAP` (function) | A number; default 20 |
 | GitHub token | Firebase secret `FLUTTERFIX_GITHUB_TOKEN` | A fine-grained token on your app repo |
 | Reporter account | Variable `FLUTTERFIX_REPORTER` (workflow) | Owner of that token |
-| Anthropic key | Secret `ANTHROPIC_API_KEY` (workflow) | Your key |
+| Claude access | Secret `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` (workflow) | Your subscription token, or an API key |
 | Flutter version | Variable `FLUTTER_VERSION` (workflow) | The version your app uses |
 | Extra build steps | `.github/workflows/flutterfix.yml` | Anything your project needs before `flutter test` |
 | Branch for screenshots | `BRANCH` in `server/functions/index.js` | Leave as `flutterfix-reports` unless it clashes |
@@ -539,7 +550,8 @@ the same port fails.
 | `FLUTTERFIX_GITHUB_REPO` | Function parameter | `owner/repo` that receives the issues. |
 | `FLUTTERFIX_ALLOWED_EMAILS` | Function parameter | Comma-separated addresses or `*@domain` entries allowed to send. Must be verified. |
 | `FLUTTERFIX_DAILY_CAP` | Function parameter | Reports per tester per day. Default 20. |
-| `ANTHROPIC_API_KEY` | GitHub secret | Runs Claude in the Action. |
+| `CLAUDE_CODE_OAUTH_TOKEN` | GitHub secret | Runs Claude in the Action using your Claude plan. |
+| `ANTHROPIC_API_KEY` | GitHub secret | Fallback: runs Claude with a pay-per-use API key when no token is set. |
 | `FLUTTERFIX_REPORTER` | GitHub variable | The only issue author the workflow trusts. |
 | `FLUTTERFIX_MONTHLY_CAP` | GitHub variable | Action runs per month. Default 30. |
 
@@ -580,7 +592,8 @@ More detail on the function is in [`server/README.md`](server/README.md).
 | "Not allowed to send reports" | The caller is not signed in, their email is not in `FLUTTERFIX_ALLOWED_EMAILS`, or the email is not verified. |
 | "daily limit reached" | The tester sent more than `FLUTTERFIX_DAILY_CAP` today. |
 | The banner says "Saved, will send automatically" | There was no connection. It sends when the app next has one. |
-| Issue appears but no pull request | The Action did not run: check `FLUTTERFIX_REPORTER` matches the token's owner, the `flutterfix` label exists, `ANTHROPIC_API_KEY` is set, and the monthly cap is not reached (see the Actions tab). |
+| The Action fails after about 2 seconds, cost 0 | Claude was refused before starting. Add `show_full_output: true` to the Claude step to read the message. "401 Invalid bearer token" means the stored token is wrong, usually because it was copied across two lines or the clipboard held something else. Re-store it with `scripts/store-claude-token.sh owner/repo`, which tests the token first. |
+| Issue appears but no pull request | The Action did not run: check `FLUTTERFIX_REPORTER` matches the token's owner, the `flutterfix` label exists, a Claude token or `ANTHROPIC_API_KEY` is set, and the monthly cap is not reached (see the Actions tab). |
 | The Action cannot fetch the screenshot | The workflow needs `fetch-depth: 0` (already set) so the `flutterfix-reports` branch is available. |
 | The box covers the element | It moves to the top when the element is in the lower half; if it still overlaps, report it. |
 | Reports have no source line | Expected in release builds. Mark elements with `.fixable('name')`. |
