@@ -37,11 +37,7 @@ class LocalReceiverSink extends FlutterFixSink {
     try {
       final request = await client.post(_host, port, '/report');
       request.headers.contentType = ContentType.json;
-      final body = report.toJson()
-        ..['screenshotPngBase64'] = report.screenshotPng == null
-            ? null
-            : base64Encode(report.screenshotPng!);
-      request.write(jsonEncode(body));
+      request.write(jsonEncode(report.toJson(includeScreenshot: true)));
       final response =
           await request.close().timeout(const Duration(seconds: 10));
       final text = await response.transform(utf8.decoder).join();

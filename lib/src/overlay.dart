@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import 'capture.dart';
 import 'inspect.dart';
+import 'outbox_sink.dart';
 import 'report.dart';
 import 'sink.dart';
 
@@ -61,7 +62,7 @@ class FlutterFix extends StatefulWidget {
   State<FlutterFix> createState() => _FlutterFixState();
 }
 
-class _FlutterFixState extends State<FlutterFix> {
+class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
   final GlobalKey _boundaryKey = GlobalKey();
   ElementInfo? _element;
   Offset _touch = Offset.zero;
@@ -70,6 +71,7 @@ class _FlutterFixState extends State<FlutterFix> {
   bool _sending = false;
   String? _banner;
   bool _bannerError = false;
+  bool _bannerInfo = false;
   Timer? _bannerTimer;
   final TextEditingController _text = TextEditingController();
   final FocusNode _focus = FocusNode();
@@ -77,7 +79,28 @@ class _FlutterFixState extends State<FlutterFix> {
   int _session = 0;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _flush();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _flush();
+  }
+
+  /// Sends reports that were saved while there was no connection.
+  void _flush() {
+    final sink = widget.sink;
+    if (widget.enabled && sink is FlushableSink) {
+      unawaited((sink as FlushableSink).flush());
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _bannerTimer?.cancel();
     _text.dispose();
     _focus.dispose();
@@ -135,18 +158,23 @@ class _FlutterFixState extends State<FlutterFix> {
       _composing = false;
     });
     _showBanner(
-      result.ok
-          ? 'Sent ${result.id ?? ''} to Claude'
-          : (result.message ?? 'Send failed'),
+      result.queued
+          ? (result.message ?? 'Saved. Will send when online.')
+          : result.ok
+              ? 'Sent ${result.id ?? ''} to Claude'
+              : (result.message ?? 'Send failed'),
       error: !result.ok,
+      info: result.queued,
     );
+    if (result.ok && !result.queued) _flush();
   }
 
-  void _showBanner(String text, {required bool error}) {
+  void _showBanner(String text, {required bool error, bool info = false}) {
     _bannerTimer?.cancel();
     setState(() {
       _banner = text;
       _bannerError = error;
+      _bannerInfo = info;
     });
     _bannerTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _banner = null);
@@ -211,8 +239,11 @@ class _FlutterFixState extends State<FlutterFix> {
       right: 16,
       child: IgnorePointer(
         child: Material(
-          color:
-              _bannerError ? const Color(0xFFB3261E) : const Color(0xFF1B7F3B),
+          color: _bannerError
+              ? const Color(0xFFB3261E)
+              : _bannerInfo
+                  ? const Color(0xFF8A5A00)
+                  : const Color(0xFF1B7F3B),
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
