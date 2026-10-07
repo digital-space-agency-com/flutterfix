@@ -18,7 +18,7 @@ class ReplayEvent {
 class ReplayConfig {
   const ReplayConfig({
     this.rolling = true,
-    this.rollingSeconds = 10,
+    this.rollingSeconds = 15,
     this.maxManualSeconds = 30,
     this.fps = 4,
     this.frameWidth = 240,

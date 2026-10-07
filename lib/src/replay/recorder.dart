@@ -155,11 +155,34 @@ class ReplayRecorder with WidgetsBindingObserver {
     _events.removeWhere((e) => e.t < cutoff);
   }
 
-  /// The last [ReplayConfig.rollingSeconds], as a report attachment.
-  Future<ReplayAttachment?> snapshotRolling() => _compose(
-        'rolling',
-        (nowMs - config.rollingSeconds * 1000).clamp(0, nowMs),
-      );
+  /// The last [ReplayConfig.rollingSeconds] up to *this instant*, as a report
+  /// attachment. The window is fixed when this is called, so it ends when the
+  /// comment box opens: however long the person then takes to type, nothing
+  /// after the press is included and nothing before it is lost.
+  Future<ReplayAttachment?> snapshotRolling() async {
+    final end = nowMs;
+    final from = (end - config.rollingSeconds * 1000).clamp(0, end);
+    await _addFinalFrame(end);
+    return _compose('rolling', from, end);
+  }
+
+  /// One more frame taken now, so the strip ends on exactly what the person
+  /// was looking at rather than a frame up to a second old.
+  Future<void> _addFinalFrame(int t) async {
+    if (_capturing) return;
+    _capturing = true;
+    try {
+      final image = await capturer(config.frameWidth.toDouble());
+      if (image != null) {
+        _frames.add(_Frame(t, image));
+        _lastFrameT = t;
+      }
+    } catch (_) {
+      // The strip just ends on the previous frame.
+    } finally {
+      _capturing = false;
+    }
+  }
 
   void startManual() {
     _manualStart = nowMs;
@@ -176,17 +199,17 @@ class ReplayRecorder with WidgetsBindingObserver {
     if (from == null) return null;
     // One last frame so the strip ends on what you were looking at.
     _dirty = true;
+    final end = nowMs;
     await _tick();
-    final result = await _compose('manual', from);
+    final result = await _compose('manual', from, end);
     _manualStart = null;
     return result;
   }
 
-  Future<ReplayAttachment?> _compose(String mode, int from) async {
-    final end = nowMs;
-    final frames = _frames.where((f) => f.t >= from).toList();
+  Future<ReplayAttachment?> _compose(String mode, int from, int end) async {
+    final frames = _frames.where((f) => f.t >= from && f.t <= end).toList();
     final events = _events
-        .where((e) => e.t >= from)
+        .where((e) => e.t >= from && e.t <= end)
         .map((e) => ReplayEvent(e.t - from, e.kind, e.data))
         .toList();
     if (frames.isEmpty && events.isEmpty) return null;

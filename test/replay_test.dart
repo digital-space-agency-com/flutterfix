@@ -24,6 +24,7 @@ Widget listPage(ValueNotifier<int> items) => Scaffold(
     );
 
 void main() {
+  windowTests();
   lateEnable();
   testWidgets('the probe counts list items and text on screen', (tester) async {
     final items = ValueNotifier(0);
@@ -153,6 +154,48 @@ void main() {
     expect(back.timeline.single['name'], '/liked');
     expect(back.filmstripPng, [1, 2, 3]);
     expect(back.frames, 12);
+  });
+}
+
+void windowTests() {
+  testWidgets(
+      'the replay ends the moment the box opens, however long the typing takes',
+      (tester) async {
+    final image = (await tester.runAsync(tinyImage))!;
+    await tester.pumpWidget(MaterialApp(
+      builder: (context, child) => FlutterFix(
+        sink: MemorySink(),
+        replay: const ReplayConfig(fps: 4, rollingSeconds: 15),
+        frameCapturer: (_) async => image.clone(),
+        child: child!,
+      ),
+      home: const Scaffold(body: Text('Home')),
+    ));
+    final recorder = ReplayRecorder.current!;
+    for (var i = 0; i < 24; i++) {
+      await tester.pump(const Duration(milliseconds: 250)); // 6 seconds
+    }
+
+    // The press: the window is fixed here...
+    final pressedAt = recorder.nowMs;
+    final pending = recorder.snapshotRolling();
+
+    // ...and the person then takes a long time to type.
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 250)); // 10 more seconds
+    }
+    final replay = await tester.runAsync(() => pending);
+
+    expect(replay, isNotNull);
+    expect(replay!.seconds, closeTo(pressedAt / 1000, 0.3),
+        reason: 'covers the time up to the press only');
+    final lastEvent = replay.timeline
+        .map((e) => (e['t'] as int))
+        .fold<int>(0, (a, b) => a > b ? a : b);
+    expect(lastEvent, lessThanOrEqualTo(pressedAt),
+        reason: 'nothing from after the press is included');
+    expect(replay.filmstripPng, isNotNull);
+    await tester.pumpWidget(const SizedBox());
   });
 }
 

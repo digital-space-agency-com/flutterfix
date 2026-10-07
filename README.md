@@ -214,9 +214,13 @@ Claude cannot watch video, so the replay is built from things it can read:
 
 **Two ways to record**
 
-- **Rolling (always on).** The last 10 seconds are kept in memory. When something
+- **Rolling (always on).** The last 15 seconds are kept in memory. When something
   looks wrong, long press and report straight afterwards: the replay of what just
   happened is attached. You do not have to know in advance.
+  **The replay ends the moment you press and the comment box opens**, with a
+  fresh final frame taken at that instant. It is fixed there, so it does not
+  matter how long you then take to type: nothing after the press is included, and
+  you do not have to be quick to catch the last interaction.
 - **Manual.** In the comment box press **Record**. The box closes and a red bar
   shows `Recording 0:07, tap to stop`. Do the thing (open the screen, scroll),
   tap the bar, and the comment box reopens with the recording attached. It stops
@@ -251,7 +255,7 @@ also feeds the replay: when it changes, that counts as a page change.
 | Setting | Default | Meaning |
 |---|---|---|
 | `rolling` | `true` | Keep the last seconds at all times. Set `false` for manual recording only. |
-| `rollingSeconds` | `10` | How much is kept. |
+| `rollingSeconds` | `15` | How much is kept, ending at the moment the comment box opens. |
 | `maxManualSeconds` | `30` | A manual recording stops by itself after this. |
 | `fps` | `4` | Frames kept per second. A few is enough to see a list fill in. |
 | `frameWidth` | `240` | Width of each stored frame in pixels. |
