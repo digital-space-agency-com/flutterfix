@@ -24,6 +24,7 @@ Widget listPage(ValueNotifier<int> items) => Scaffold(
     );
 
 void main() {
+  lateEnable();
   testWidgets('the probe counts list items and text on screen', (tester) async {
     final items = ValueNotifier(0);
     await tester.pumpWidget(MaterialApp(home: listPage(items)));
@@ -152,5 +153,32 @@ void main() {
     expect(back.timeline.single['name'], '/liked');
     expect(back.filmstripPng, [1, 2, 3]);
     expect(back.frames, 12);
+  });
+}
+
+void lateEnable() {
+  testWidgets('the replay starts when a tester signs in after launch',
+      (tester) async {
+    final image = (await tester.runAsync(tinyImage))!;
+    Future<void> show(bool enabled) => tester.pumpWidget(MaterialApp(
+          builder: (context, child) => FlutterFix(
+            enabled: enabled,
+            sink: MemorySink(),
+            replay: const ReplayConfig(),
+            frameCapturer: (_) async => image.clone(),
+            child: child!,
+          ),
+          home: const Scaffold(body: Text('Home')),
+        ));
+
+    await show(false);
+    expect(ReplayRecorder.current, isNull, reason: 'off while not a tester');
+
+    await show(true);
+    expect(ReplayRecorder.current, isNotNull);
+
+    await show(false);
+    expect(ReplayRecorder.current, isNull, reason: 'stops when they sign out');
+    await tester.pumpWidget(const SizedBox());
   });
 }

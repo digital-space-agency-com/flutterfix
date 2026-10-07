@@ -100,18 +100,49 @@ class _FlutterFixState extends State<FlutterFix> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (widget.enabled && widget.replay != null) {
-      _recorder = ReplayRecorder(
-        config: widget.replay!,
-        capturer: widget.frameCapturer ?? _captureFrame,
-        screenSize: _screenSize,
-        screenName: widget.screenName,
-        onManualTimeout: () {
-          if (_recording) _stopRecording();
-        },
-      )..start();
-    }
+    _setUpRecorder();
     _flush();
+  }
+
+  /// Starts or stops the replay recorder to match the current settings. Called
+  /// at start and whenever `enabled` or `replay` changes, for example when a
+  /// tester signs in after the app has launched.
+  void _setUpRecorder() {
+    final wanted = widget.enabled && widget.replay != null;
+    if (!wanted) {
+      _recorder?.dispose();
+      _recorder = null;
+      _replay = null;
+      return;
+    }
+    if (_recorder != null) return;
+    _recorder = ReplayRecorder(
+      config: widget.replay!,
+      capturer: widget.frameCapturer ?? _captureFrame,
+      screenSize: _screenSize,
+      screenName: widget.screenName,
+      onManualTimeout: () {
+        if (_recording) _stopRecording();
+      },
+    )..start();
+  }
+
+  @override
+  void didUpdateWidget(FlutterFix old) {
+    super.didUpdateWidget(old);
+    if (old.enabled != widget.enabled || old.replay != widget.replay) {
+      if (old.replay != widget.replay) {
+        _recorder?.dispose();
+        _recorder = null;
+      }
+      _setUpRecorder();
+      if (!widget.enabled) {
+        _composing = false;
+        _recording = false;
+      } else if (!old.enabled) {
+        _flush();
+      }
+    }
   }
 
   RenderRepaintBoundary? get _boundary =>
