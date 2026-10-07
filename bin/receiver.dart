@@ -1,0 +1,81 @@
+// Receives FixLens reports from a running app and prints one line per report,
+// so a Claude Code session can pick them up (start it with the Monitor tool).
+//
+//   dart run fixlens:receiver [--port 4747] [--out .fixlens]
+import 'dart:convert';
+import 'dart:io';
+
+Future<void> main(List<String> args) async {
+  var port = 4747;
+  var out = '.fixlens';
+  for (var i = 0; i < args.length - 1; i++) {
+    if (args[i] == '--port') port = int.parse(args[i + 1]);
+    if (args[i] == '--out') out = args[i + 1];
+  }
+  final dir = Directory('$out/reports')..createSync(recursive: true);
+  var n = dir
+      .listSync()
+      .whereType<File>()
+      .where((f) => f.path.endsWith('.json'))
+      .length;
+
+  final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+  stdout
+      .writeln('fixlens receiver listening on :$port, writing to $out/reports');
+
+  await for (final req in server) {
+    try {
+      if (req.method == 'GET') {
+        req.response
+          ..headers.contentType = ContentType.json
+          ..write('{"ok":true}');
+        await req.response.close();
+        continue;
+      }
+      final body = await utf8.decoder.bind(req).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final id = 'r${++n}';
+      final b64 = json.remove('screenshotPngBase64') as String?;
+      String? png;
+      if (b64 != null) {
+        png = '${dir.path}/$id.png';
+        File(png).writeAsBytesSync(base64Decode(b64));
+      }
+      File('${dir.path}/$id.json')
+          .writeAsStringSync(const JsonEncoder.withIndent('  ').convert(json));
+
+      final el = json['element'] as Map<String, dynamic>?;
+      String one(String t) => t.replaceAll(RegExp(r'\s+'), ' ').trim();
+      final texts = ((el?['texts'] as List?)?.cast<String>() ?? const [])
+          .map(one)
+          .toList();
+      final near = ((el?['nearbyTexts'] as List?)?.cast<String>() ?? const [])
+          .map(one)
+          .toList();
+      final chain = el?['creatorChain'] as String?;
+      final parts = <String>[
+        if (el?['name'] != null) el!['name'] as String,
+        if (el?['location'] != null) el!['location'] as String,
+        if (el != null) el['kind'] as String,
+        if (texts.isNotEmpty) 'text ${texts.map((t) => '"$t"').join(', ')}',
+        if (near.isNotEmpty)
+          'near ${near.take(4).map((t) => '"$t"').join(', ')}',
+        if (chain != null) 'in ${chain.split(' ← ').take(6).join(' ← ')}',
+        if (json['screenName'] != null) '${json['screenName']} screen',
+        if (png != null) png,
+      ];
+      final comment =
+          (json['comment'] as String).replaceAll(RegExp(r'\s+'), ' ');
+      stdout.writeln('[fix $id] ${parts.join(' · ')} :: $comment');
+
+      req.response
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({'ok': true, 'id': id}));
+      await req.response.close();
+    } catch (e) {
+      stdout.writeln('fixlens receiver error: $e');
+      req.response.statusCode = 500;
+      await req.response.close();
+    }
+  }
+}

@@ -1,0 +1,23 @@
+name: fixlens
+description: >-
+  Long press any element of a Flutter app, say what is wrong, and the report
+  (element, screenshot, your words) goes to Claude Code. Debug and internal
+  test builds only.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0
+  flutter: ">=3.24.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+executables:
+  receiver:
