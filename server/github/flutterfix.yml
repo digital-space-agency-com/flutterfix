@@ -41,9 +41,18 @@ jobs:
       - name: Skip if this report was already handled
         id: gate
         run: |
-          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "flutterfix/issue-$ISSUE" --state all --json number --jq length)
+          branch="flutterfix/issue-$ISSUE"
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state all --json number --jq length)
           if [ "$existing" != "0" ]; then
             echo "A pull request already exists for issue $ISSUE"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+            echo "done=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Claude already pushed a fix but no PR was opened: do not pay for
+          # another Claude run, just open the PR.
+          if gh api "repos/$GITHUB_REPOSITORY/branches/$branch" --silent 2>/dev/null; then
+            echo "Branch $branch already exists without a pull request"
             echo "go=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -75,6 +84,7 @@ jobs:
         run: flutter pub get
 
       - uses: anthropics/claude-code-action@v1
+        id: claude
         if: steps.gate.outputs.go == 'true'
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -93,9 +103,11 @@ jobs:
                names and the source location) and understand what the tester means.
             2. Make the smallest change that fixes it, matching the surrounding style.
             3. Run `flutter analyze` and `flutter test`. Fix anything you broke.
-            4. Create the branch `flutterfix/issue-${{ github.event.issue.number }}`, commit,
-               push, and open a pull request that says what was wrong and what you
-               changed, and closes the issue.
+            4. Create the branch `flutterfix/issue-${{ github.event.issue.number }}`, commit and
+               push. Write the commit message as a short title line, a blank line, then a
+               few sentences on what was wrong and what you changed: it becomes the pull
+               request text. Open the pull request too if you are able to; if not, the
+               workflow opens it from your commit.
             5. If the report is unclear or you cannot find the code, do not guess: comment
                on the issue with what you need to know instead.
 
@@ -104,3 +116,33 @@ jobs:
           claude_args: >-
             --max-turns 40
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(git:*),Bash(flutter:*),Bash(dart:*),Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh pr create:*),Bash(gh pr list:*)"
+
+      # Claude's job is to fix and push. Opening the pull request here, rather
+      # than relying on Claude's own permissions, makes it dependable, and using
+      # the GitHub App's token (not the built-in one) means your normal PR checks
+      # run on it.
+      - name: Open the pull request from Claude's branch
+        if: always() && steps.gate.outputs.done != 'true'
+        env:
+          GH_TOKEN: ${{ steps.claude.outputs.github_token || github.token }}
+        run: |
+          branch="flutterfix/issue-$ISSUE"
+          if ! gh api "repos/$GITHUB_REPOSITORY/branches/$branch" --silent 2>/dev/null; then
+            echo "Claude did not push a branch; no pull request to open."
+            exit 0
+          fi
+          if [ "$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state all --json number --jq length)" != "0" ]; then
+            echo "A pull request already exists."
+            exit 0
+          fi
+          message=$(gh api "repos/$GITHUB_REPOSITORY/branches/$branch" --jq .commit.commit.message)
+          title=$(printf '%s\n' "$message" | head -n 1)
+          detail=$(printf '%s\n' "$message" | tail -n +2)
+          base=$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)
+          gh pr create --repo "$GITHUB_REPOSITORY" --head "$branch" --base "$base" \
+            --title "$title" \
+            --body "$detail
+
+          Closes #$ISSUE
+
+          Opened by FlutterFix from a tester's report. Review before merging."
