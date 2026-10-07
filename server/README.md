@@ -1,5 +1,7 @@
 # FlutterFix server (reports from a phone, away from your Mac)
 
+> The full guide, including what to change for your own app, is in the [main README](../README.md#away-from-your-mac-the-cloud-route). This page is the short reference for the server pieces.
+
 ```
 phone ──(HTTPS, signed-in tester)──▶ Firebase function ──▶ GitHub issue + screenshot
                                                                   │
